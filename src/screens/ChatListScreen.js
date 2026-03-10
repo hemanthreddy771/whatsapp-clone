@@ -11,9 +11,8 @@ import {
   Image,
   Share
 } from 'react-native';
-import { db } from '../config/firebase';
+import { nativeDb as db } from '../config/firebase';
 import auth from '@react-native-firebase/auth';
-import { collection, onSnapshot, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import Colors from '../constants/Colors';
@@ -28,30 +27,30 @@ const ChatListScreen = ({ navigation }) => {
   useEffect(() => {
     if (!user) return;
 
-    const q = query(
-      collection(db, 'chats'),
-      where('participants', 'array-contains', user.uid),
-      orderBy('lastMessageTime', 'desc')
-    );
-
-    const unsubscribe = onSnapshot(q, async (snapshot) => {
-      const fetchedChats = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      setChats(fetchedChats);
-      setLoading(false);
-    }, (error) => {
-      console.error("Error fetching chats: ", error);
-      setLoading(false);
-    });
+    // Use Native SDK syntax for real-time listener
+    const unsubscribe = db.collection('chats')
+      .where('participants', 'array-contains', user.uid)
+      .orderBy('lastMessageTime', 'desc')
+      .onSnapshot((snapshot) => {
+        if (snapshot) {
+          const fetchedChats = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+          }));
+          setChats(fetchedChats);
+        }
+        setLoading(false);
+      }, (error) => {
+        console.error("Error fetching chats: ", error);
+        setLoading(false);
+      });
 
     return () => unsubscribe();
   }, [user]);
 
   const onInvite = async () => {
     try {
-      const result = await Share.share({
+      await Share.share({
         message:
           'Hey! I am using this cool WhatsApp Clone app. Join me so we can chat securely! 🚀',
       });
@@ -61,23 +60,27 @@ const ChatListScreen = ({ navigation }) => {
   };
 
   const handleSearchUser = async () => {
-    const cleanNumber = searchNumber.trim();
+    // IMPORTANT: Remove ALL spaces and special characters for the search
+    const cleanNumber = searchNumber.replace(/[^\d+]/g, '');
+
     if (cleanNumber.length < 10) {
-      Alert.alert('Invalid Number', 'Please enter a full phone number.');
+      Alert.alert('Invalid Number', 'Please enter a full phone number including country code (e.g. +91...)');
       return;
     }
 
     setIsSearching(true);
     try {
-      const q = query(collection(db, 'users'), where('phoneNumber', '==', cleanNumber));
-      const querySnapshot = await getDocs(q);
+      // Use Native SDK syntax for one-time fetch
+      const querySnapshot = await db.collection('users')
+        .where('phoneNumber', '==', cleanNumber)
+        .get();
 
       if (querySnapshot.empty) {
-        Alert.alert('Not Found', 'No user found with this phone number.');
+        Alert.alert('Not Found', `No user found with number: ${cleanNumber}. They must register and set up their profile first.`);
       } else {
         const foundUser = querySnapshot.docs[0].data();
         if (foundUser.uid === auth().currentUser.uid) {
-          Alert.alert('Error', 'You cannot chat with yourself.');
+          Alert.alert('Note', 'This is your own number!');
         } else {
           navigation.navigate('ChatRoom', {
             chatId: [auth().currentUser.uid, foundUser.uid].sort().join('_'),
@@ -86,14 +89,16 @@ const ChatListScreen = ({ navigation }) => {
         }
       }
     } catch (error) {
-      Alert.alert('Error', 'Something went wrong during search.');
+      console.error("Search error:", error);
+      Alert.alert('Error', 'Something went wrong during search: ' + error.message);
     } finally {
       setIsSearching(false);
     }
   };
 
   const renderChatItem = ({ item }) => {
-    const lastMessageTime = item.lastMessageTime?.toDate();
+    // Native SDK toDate() helper for compatibility if available, or handle metadata
+    const lastMessageTime = item.lastMessageTime?.toDate ? item.lastMessageTime.toDate() : null;
     const timeString = lastMessageTime ?
       lastMessageTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
 
@@ -304,4 +309,3 @@ const styles = StyleSheet.create({
 });
 
 export default ChatListScreen;
-

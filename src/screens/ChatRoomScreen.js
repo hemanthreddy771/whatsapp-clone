@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,17 +7,17 @@ import {
   TouchableOpacity,
   FlatList,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  ImageBackground
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import MessageBubble from '../components/MessageBubble';
-import { db } from '../config/firebase';
+import { nativeDb as db } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
-import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, getDoc, setDoc } from 'firebase/firestore';
 import { sendPushNotification } from '../utils/notifications';
+import firestore from '@react-native-firebase/firestore';
 
 import Colors from '../constants/Colors';
-import { ImageBackground } from 'react-native';
 
 const ChatRoomScreen = ({ route }) => {
   const { chatId, chatName } = route.params || { chatId: 'general_room', chatName: 'Chat' };
@@ -29,23 +29,26 @@ const ChatRoomScreen = ({ route }) => {
   const typingTimeoutRef = useRef(null);
 
   useEffect(() => {
-    const q = query(
-      collection(db, `chats/${chatId}/messages`),
-      orderBy('createdAt', 'asc')
-    );
+    if (!chatId || !user) return;
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedMessages = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      setMessages(fetchedMessages);
-    });
+    // Use Native SDK syntax for real-time messages
+    const unsubscribe = db.collection('chats')
+      .doc(chatId)
+      .collection('messages')
+      .orderBy('createdAt', 'asc')
+      .onSnapshot((snapshot) => {
+        if (snapshot) {
+          const fetchedMessages = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+          }));
+          setMessages(fetchedMessages);
+        }
+      });
 
     // Listen for other user's typing status
-    const chatRef = doc(db, 'chats', chatId);
-    const unsubscribeTyping = onSnapshot(chatRef, (docSnap) => {
-      if (docSnap.exists()) {
+    const unsubscribeTyping = db.collection('chats').doc(chatId).onSnapshot((docSnap) => {
+      if (docSnap && docSnap.exists) {
         const data = docSnap.data();
         const receiverId = chatId.replace(user.uid, '').replace('_', '');
         setIsOtherTyping(data[`typing_${receiverId}`] || false);
@@ -56,19 +59,22 @@ const ChatRoomScreen = ({ route }) => {
       unsubscribe();
       unsubscribeTyping();
     };
-  }, [chatId]);
+  }, [chatId, user]);
 
   const handleTextChange = (text) => {
     setInputText(text);
 
-    // Update typing status in Firestore
-    const chatRef = doc(db, 'chats', chatId);
-    setDoc(chatRef, { [`typing_${user.uid}`]: true }, { merge: true });
+    // Update typing status in Firestore using Native SDK
+    db.collection('chats').doc(chatId).set({
+      [`typing_${user.uid}`]: true
+    }, { merge: true }).catch(e => console.log("Typing update error:", e));
 
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
 
     typingTimeoutRef.current = setTimeout(() => {
-      setDoc(chatRef, { [`typing_${user.uid}`]: false }, { merge: true });
+      db.collection('chats').doc(chatId).set({
+        [`typing_${user.uid}`]: false
+      }, { merge: true }).catch(e => console.log("Typing stop error:", e));
     }, 2000);
   };
 
@@ -81,28 +87,30 @@ const ChatRoomScreen = ({ route }) => {
     try {
       const messageData = {
         text: text,
-        createdAt: serverTimestamp(),
+        createdAt: firestore.FieldValue.serverTimestamp(),
         senderId: user.uid,
         senderName: userData?.displayName || 'Unknown',
       };
 
-      await addDoc(collection(db, `chats/${chatId}/messages`), messageData);
+      // Add message via Native SDK
+      await db.collection('chats').doc(chatId).collection('messages').add(messageData);
 
       // Update chat metadata for list view
       const receiverId = chatId.replace(user.uid, '').replace('_', '');
       const participants = [user.uid, receiverId];
 
-      await setDoc(doc(db, 'chats', chatId), {
+      await db.collection('chats').doc(chatId).set({
         lastMessage: text,
-        lastMessageTime: serverTimestamp(),
+        lastMessageTime: firestore.FieldValue.serverTimestamp(),
         lastMessageSenderId: user.uid,
         participants: participants,
-        chatName: chatName, // Usually you'd store individual names per user, but for now this works
+        chatName: chatName,
       }, { merge: true });
 
-      const receiverDoc = await getDoc(doc(db, 'users', receiverId));
+      // Handle push notifications
+      const receiverDoc = await db.collection('users').doc(receiverId).get();
 
-      if (receiverDoc.exists()) {
+      if (receiverDoc.exists) {
         const receiverData = receiverDoc.data();
         if (receiverData.pushToken) {
           await sendPushNotification(
@@ -127,7 +135,7 @@ const ChatRoomScreen = ({ route }) => {
       <ImageBackground
         source={{ uri: 'https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png' }}
         style={StyleSheet.absoluteFillObject}
-        imageStyle={{ opacity: 0.08 }} // Subtle pattern
+        imageStyle={{ opacity: 0.08 }}
       />
 
       <FlatList
