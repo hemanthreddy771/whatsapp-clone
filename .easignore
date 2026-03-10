@@ -1,0 +1,15 @@
+node_modules
+.expo
+.git
+ios
+android
+web-build
+dist
+.env
+.easignore
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.pem
