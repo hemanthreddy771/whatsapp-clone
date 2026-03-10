@@ -86,9 +86,10 @@ const ProfileSetupScreen = ({ navigation }) => {
 
       console.log('Saving profile data to Firestore...');
       // 10 second timeout for database write
+      // ENSURING WE USE NATIVE SDK SYNTAX: .collection().doc().set()
       const savePromise = nativeDb.collection('users').doc(uid).set(userData);
       const dbTimeout = new Promise((resolve, reject) =>
-        setTimeout(() => reject(new Error("Database save timeout. Check your internet or Firebase Rules.")), 10000)
+        setTimeout(() => reject(new Error("Database save timeout. Please check if Firestore is enabled in your Firebase Console.")), 10000)
       );
 
       await Promise.race([savePromise, dbTimeout]);

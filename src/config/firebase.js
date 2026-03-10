@@ -4,7 +4,7 @@ import firestore from '@react-native-firebase/firestore';
 import storage_module from '@react-native-firebase/storage';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDV2c0G_k3bChtZxlBLnmJzRJoIU0vfnFM",
+  apiKey: "AIzaSyANDTitIPCumJNmNnflKM1ZE8KELsKd8dI",
   authDomain: "whatsapp-clone-7c929.firebaseapp.com",
   projectId: "whatsapp-clone-7c929",
   storageBucket: "whatsapp-clone-7c929.firebasestorage.app",
