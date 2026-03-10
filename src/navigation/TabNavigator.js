@@ -27,7 +27,7 @@ const TabNavigator = () => {
           else if (route.name === 'Updates') iconName = focused ? 'sparkles' : 'sparkles-outline';
           else if (route.name === 'Calls') iconName = focused ? 'call' : 'call-outline';
           else if (route.name === 'Settings') iconName = focused ? 'person-circle' : 'person-circle-outline';
-          
+
           return <Ionicons name={iconName} size={28} color={color} />;
         },
         tabBarActiveTintColor: Colors.secondary,
@@ -51,13 +51,17 @@ const TabNavigator = () => {
         },
       })}
     >
-      <Tab.Screen 
-        name="Chats" 
-        component={ChatListScreen} 
+      <Tab.Screen
+        name="Chats"
+        component={ChatListScreen}
         options={{ title: 'WhatsApp' }}
       />
-      <Tab.Screen name="Updates" children={() => <Placeholder name="Status Updates" />} />
-      <Tab.Screen name="Calls" children={() => <Placeholder name="Call History" />} />
+      <Tab.Screen name="Updates">
+        {() => <Placeholder name="Status Updates" />}
+      </Tab.Screen>
+      <Tab.Screen name="Calls">
+        {() => <Placeholder name="Call History" />}
+      </Tab.Screen>
       <Tab.Screen name="Settings" component={SettingsScreen} />
     </Tab.Navigator>
   );
