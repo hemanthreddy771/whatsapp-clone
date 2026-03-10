@@ -134,7 +134,12 @@ const AppNavigator = () => {
                         });
 
                         // Notify the other user about the call
-                        const receiverId = route.params.chatId.replace(user.uid, '').replace('_', '');
+                        const currentUser = user;
+                        if (!currentUser) return;
+
+                        const receiverId = (route.params?.chatId || '').replace(currentUser.uid, '').replace('_', '');
+                        if (!receiverId) return;
+
                         const receiverDoc = await db.collection('users').doc(receiverId).get();
                         if (receiverDoc.exists && receiverDoc.data().pushToken) {
                           await sendPushNotification(
@@ -158,7 +163,12 @@ const AppNavigator = () => {
                         });
 
                         // Notify the other user about the call
-                        const receiverId = route.params.chatId.replace(user.uid, '').replace('_', '');
+                        const currentUser = user;
+                        if (!currentUser) return;
+
+                        const receiverId = (route.params?.chatId || '').replace(currentUser.uid, '').replace('_', '');
+                        if (!receiverId) return;
+
                         const receiverDoc = await db.collection('users').doc(receiverId).get();
                         if (receiverDoc.exists && receiverDoc.data().pushToken) {
                           await sendPushNotification(

@@ -44,25 +44,29 @@ const ChatRoomScreen = ({ route }) => {
           }));
           setMessages(fetchedMessages);
         }
-      });
+      }, (err) => console.log("Message fetch error:", err));
 
-    // Listen for other user's typing status
+    // Listen for other user's typing status safely
     const unsubscribeTyping = db.collection('chats').doc(chatId).onSnapshot((docSnap) => {
-      if (docSnap && docSnap.exists) {
+      if (docSnap && docSnap.exists && user?.uid) {
         const data = docSnap.data();
-        const receiverId = chatId.replace(user.uid, '').replace('_', '');
-        setIsOtherTyping(data[`typing_${receiverId}`] || false);
+        const receiverId = (chatId || '').replace(user.uid, '').replace('_', '');
+        if (receiverId) {
+          setIsOtherTyping(data[`typing_${receiverId}`] || false);
+        }
       }
-    });
+    }, (err) => console.log("Typing fetch error:", err));
 
     return () => {
       unsubscribe();
       unsubscribeTyping();
     };
-  }, [chatId, user]);
+  }, [chatId, user?.uid]);
 
   const handleTextChange = (text) => {
     setInputText(text);
+
+    if (!user?.uid || !chatId) return;
 
     // Update typing status in Firestore using Native SDK
     db.collection('chats').doc(chatId).set({
@@ -72,14 +76,16 @@ const ChatRoomScreen = ({ route }) => {
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
 
     typingTimeoutRef.current = setTimeout(() => {
-      db.collection('chats').doc(chatId).set({
-        [`typing_${user.uid}`]: false
-      }, { merge: true }).catch(e => console.log("Typing stop error:", e));
+      if (user?.uid && chatId) {
+        db.collection('chats').doc(chatId).set({
+          [`typing_${user.uid}`]: false
+        }, { merge: true }).catch(e => console.log("Typing stop error:", e));
+      }
     }, 2000);
   };
 
   const sendMessage = async () => {
-    if (inputText.trim() === '') return;
+    if (inputText.trim() === '' || !user?.uid) return;
 
     const text = inputText;
     setInputText('');
@@ -96,7 +102,7 @@ const ChatRoomScreen = ({ route }) => {
       await db.collection('chats').doc(chatId).collection('messages').add(messageData);
 
       // Update chat metadata for list view
-      const receiverId = chatId.replace(user.uid, '').replace('_', '');
+      const receiverId = (chatId || '').replace(user.uid, '').replace('_', '');
       const participants = [user.uid, receiverId];
 
       await db.collection('chats').doc(chatId).set({
@@ -108,17 +114,18 @@ const ChatRoomScreen = ({ route }) => {
       }, { merge: true });
 
       // Handle push notifications
-      const receiverDoc = await db.collection('users').doc(receiverId).get();
-
-      if (receiverDoc.exists) {
-        const receiverData = receiverDoc.data();
-        if (receiverData.pushToken) {
-          await sendPushNotification(
-            receiverData.pushToken,
-            userData?.displayName || 'New Message',
-            text,
-            { chatId, chatName: userData?.displayName }
-          );
+      if (receiverId) {
+        const receiverDoc = await db.collection('users').doc(receiverId).get();
+        if (receiverDoc.exists) {
+          const receiverData = receiverDoc.data();
+          if (receiverData.pushToken) {
+            await sendPushNotification(
+              receiverData.pushToken,
+              userData?.displayName || 'New Message',
+              text,
+              { chatId, chatName: userData?.displayName }
+            );
+          }
         }
       }
     } catch (error) {
@@ -144,7 +151,7 @@ const ChatRoomScreen = ({ route }) => {
         renderItem={({ item }) => (
           <MessageBubble
             message={item}
-            isMine={item.senderId === user.uid}
+            isMine={item.senderId === user?.uid}
           />
         )}
         contentContainerStyle={styles.listContainer}
