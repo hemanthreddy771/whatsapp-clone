@@ -1,17 +1,52 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Image, ActivityIndicator } from 'react-native';
 import { doc, setDoc } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import auth from '@react-native-firebase/auth';
-import { db } from '../config/firebase';
+import { db, storage } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { registerForPushNotificationsAsync } from '../utils/notifications';
+import * as ImagePicker from 'expo-image-picker';
 
 import Colors from '../constants/Colors';
 
 const ProfileSetupScreen = ({ navigation }) => {
   const [name, setName] = useState('');
+  const [imageUri, setImageUri] = useState(null);
+  const [loading, setLoading] = useState(false);
   const { setUserData } = useAuth();
+
+  const pickImage = async () => {
+    // No permissions required to launch the image library
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5,
+    });
+
+    if (!result.canceled) {
+      setImageUri(result.assets[0].uri);
+    }
+  };
+
+  const uploadProfileImage = async (uri, uid) => {
+    if (!uri) return `https://i.pravatar.cc/150?u=${uid}`;
+
+    try {
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      const storageRef = ref(storage, `profile_images/${uid}`);
+      await uploadBytes(storageRef, blob);
+      const downloadURL = await getDownloadURL(storageRef);
+      return downloadURL;
+    } catch (error) {
+      console.error("Image upload failed:", error);
+      // Fallback to default if upload fails but don't break profile creation
+      return `https://i.pravatar.cc/150?u=${uid}`;
+    }
+  };
 
   const handleSaveProfile = async () => {
     if (!name.trim()) {
@@ -19,26 +54,46 @@ const ProfileSetupScreen = ({ navigation }) => {
       return;
     }
 
+    setLoading(true);
     try {
-      const pushToken = await registerForPushNotificationsAsync();
+      // Don't let push notification failure break the profile setup
+      let pushToken = null;
+      try {
+        pushToken = await registerForPushNotificationsAsync();
+      } catch (pushErr) {
+        console.log("Push token error:", pushErr);
+      }
+
+      const user = auth().currentUser;
+      const uid = user?.uid;
+      const phoneNumber = user?.phoneNumber || '';
+
+      if (!uid) {
+        Alert.alert('Error', 'User authentication error. Please restart the app.');
+        setLoading(false);
+        return;
+      }
+
+      const photoURL = await uploadProfileImage(imageUri, uid);
 
       const userData = {
-        uid: auth().currentUser.uid,
+        uid: uid,
         displayName: name,
-        phoneNumber: auth().currentUser.phoneNumber,
-        photoURL: `https://i.pravatar.cc/150?u=${auth().currentUser.uid}`,
+        phoneNumber: phoneNumber,
+        photoURL: photoURL,
         createdAt: new Date().toISOString(),
         pushToken: pushToken || null,
         privacyLockEnabled: false,
       };
 
-      await setDoc(doc(db, 'users', auth().currentUser.uid), userData);
+      await setDoc(doc(db, 'users', uid), userData);
       setUserData(userData);
       navigation.replace('Main');
     } catch (error) {
-      console.error(error);
-      Alert.alert('Error', 'Failed to save profile. Please try again.');
+      console.error("Profile saving error:", error);
+      Alert.alert('Error', 'Failed to save profile: ' + error.message);
     }
+    setLoading(false);
   };
 
   return (
@@ -46,11 +101,15 @@ const ProfileSetupScreen = ({ navigation }) => {
       <Text style={styles.title}>Profile Info</Text>
       <Text style={styles.subtitle}>Please provide your name and an optional profile photo.</Text>
 
-      <TouchableOpacity style={styles.avatarContainer}>
+      <TouchableOpacity style={styles.avatarContainer} onPress={pickImage} disabled={loading}>
         <View style={styles.avatarPlaceholder}>
-          <Ionicons name="camera" size={45} color="#fff" />
+          {imageUri ? (
+            <Image source={{ uri: imageUri }} style={styles.avatarImage} />
+          ) : (
+            <Ionicons name="camera" size={45} color="#fff" />
+          )}
           <View style={styles.plusOverlay}>
-            <Ionicons name="add" size={20} color="#fff" />
+            <Ionicons name={imageUri ? "pencil" : "add"} size={16} color="#fff" />
           </View>
         </View>
       </TouchableOpacity>
@@ -62,13 +121,22 @@ const ProfileSetupScreen = ({ navigation }) => {
           placeholderTextColor="#999"
           value={name}
           onChangeText={setName}
-          autoFocus
+          autoFocus={!loading}
           maxLength={25}
+          editable={!loading}
         />
       </View>
 
-      <TouchableOpacity style={styles.button} onPress={handleSaveProfile}>
-        <Text style={styles.buttonText}>NEXT</Text>
+      <TouchableOpacity
+        style={[styles.button, loading && { opacity: 0.7 }]}
+        onPress={handleSaveProfile}
+        disabled={loading}
+      >
+        {loading ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.buttonText}>NEXT</Text>
+        )}
       </TouchableOpacity>
     </View>
   );
@@ -97,27 +165,32 @@ const styles = StyleSheet.create({
   },
   avatarContainer: {
     marginBottom: 40,
+    position: 'relative',
   },
   avatarPlaceholder: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
     backgroundColor: '#DFE5E7',
     justifyContent: 'center',
     alignItems: 'center',
-    position: 'relative',
+  },
+  avatarImage: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
   },
   plusOverlay: {
     position: 'absolute',
-    bottom: 5,
+    bottom: 0,
     right: 5,
     backgroundColor: Colors.accent,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
+    borderWidth: 3,
     borderColor: '#fff',
   },
   inputContainer: {

@@ -1,5 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
 const firebaseConfig = {
   apiKey: "AIzaSyDV2c0G_k3bChtZxlBLnmJzRJoIU0vfnFM",
   authDomain: "whatsapp-clone-7c929.firebaseapp.com",
@@ -15,3 +16,4 @@ const app = initializeApp(firebaseConfig);
 
 // Firestore is still initialized with the web SDK for data access
 export const db = getFirestore(app);
+export const storage = getStorage(app);
