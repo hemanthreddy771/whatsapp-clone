@@ -1,24 +1,40 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, Alert, Image } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, Alert, Image, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { auth, db } from '../config/firebase';
-import { signInAnonymously } from 'firebase/auth';
+import auth from '@react-native-firebase/auth';
 import Colors from '../constants/Colors';
 
 const LoginScreen = ({ navigation }) => {
   const [phoneNumber, setPhoneNumber] = useState('+91 ');
   const [verificationCode, setVerificationCode] = useState('');
-  const [verificationId, setVerificationId] = useState(null);
+  const [confirm, setConfirm] = useState(null);
+  const [loading, setLoading] = useState(false);
 
   const requestOTP = async () => {
-    const cleanNumber = phoneNumber.trim();
+    const cleanNumber = phoneNumber.replace(/\s/g, '');
     if (!cleanNumber || cleanNumber.length < 10) {
-      Alert.alert('Error', 'Please enter a valid phone number with country code.');
+      Alert.alert('Error', 'Please enter a valid phone number with country code (e.g., +919876543210).');
       return;
     }
-    
-    setVerificationId('simulated-' + Date.now());
-    Alert.alert('Verification', 'A 6-digit code has been sent to ' + cleanNumber + ' (Simulated for Build Stability)');
+
+    setLoading(true);
+    try {
+      const confirmation = await auth().signInWithPhoneNumber(cleanNumber);
+      setConfirm(confirmation);
+      Alert.alert('OTP Sent ✓', 'A 6-digit verification code has been sent to ' + cleanNumber);
+    } catch (error) {
+      console.error('OTP Error:', error);
+      let message = 'Failed to send OTP. Please try again.';
+      if (error.code === 'auth/invalid-phone-number') {
+        message = 'Invalid phone number format. Use format: +919876543210';
+      } else if (error.code === 'auth/too-many-requests') {
+        message = 'Too many attempts. Please wait a few minutes and try again.';
+      } else if (error.code === 'auth/quota-exceeded') {
+        message = 'SMS quota exceeded. Please try again later.';
+      }
+      Alert.alert('Error', message);
+    }
+    setLoading(false);
   };
 
   const confirmOTP = async () => {
@@ -27,28 +43,36 @@ const LoginScreen = ({ navigation }) => {
       return;
     }
 
+    setLoading(true);
     try {
-      // In this version, we use Anonymous Auth for the "Container" while we wait for JS Bundle stability
-      // but we will still save user info to your real Firestore database!
-      await signInAnonymously(auth);
-      // AuthContext will handle the session
-    } catch (err) {
-      console.error(err);
-      Alert.alert('Error', 'Login failed. Please try again.');
+      await confirm.confirm(verificationCode);
+      // Auth state listener in AuthContext will handle navigation automatically
+    } catch (error) {
+      console.error('Verification Error:', error);
+      let message = 'Invalid verification code. Please try again.';
+      if (error.code === 'auth/invalid-verification-code') {
+        message = 'The OTP code you entered is incorrect. Please check and try again.';
+      } else if (error.code === 'auth/session-expired') {
+        message = 'The OTP has expired. Please request a new code.';
+        setConfirm(null);
+        setVerificationCode('');
+      }
+      Alert.alert('Verification Failed', message);
     }
+    setLoading(false);
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView 
-        style={{ flex: 1 }} 
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {!verificationId ? (
+        {!confirm ? (
           <View style={styles.content}>
-            <Image 
-              source={{ uri: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6b/WhatsApp.svg/1200px-WhatsApp.svg.png' }} 
-              style={styles.logo} 
+            <Image
+              source={{ uri: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6b/WhatsApp.svg/1200px-WhatsApp.svg.png' }}
+              style={styles.logo}
             />
             <Text style={styles.title}>Welcome to WhatsApp</Text>
             <Text style={styles.subtitle}>
@@ -66,8 +90,16 @@ const LoginScreen = ({ navigation }) => {
                   onChangeText={setPhoneNumber}
                 />
               </View>
-              <TouchableOpacity style={styles.button} onPress={requestOTP}>
-                <Text style={styles.buttonText}>AGREE AND CONTINUE</Text>
+              <TouchableOpacity
+                style={[styles.button, loading && styles.buttonDisabled]}
+                onPress={requestOTP}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.buttonText}>AGREE AND CONTINUE</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -77,9 +109,9 @@ const LoginScreen = ({ navigation }) => {
             <Text style={styles.infoText}>
               Waiting to automatically detect an SMS sent to{' '}
               <Text style={{ fontWeight: 'bold' }}>{phoneNumber}</Text>.{' '}
-              <Text style={styles.link} onPress={() => setVerificationId(null)}>Wrong number?</Text>
+              <Text style={styles.link} onPress={() => { setConfirm(null); setVerificationCode(''); }}>Wrong number?</Text>
             </Text>
-            
+
             <View style={styles.otpContainer}>
               <TextInput
                 style={styles.otpInput}
@@ -92,18 +124,34 @@ const LoginScreen = ({ navigation }) => {
                 autoFocus
               />
             </View>
-            
+
             <Text style={styles.hintText}>Enter 6-digit code</Text>
-            
-            <TouchableOpacity style={[styles.button, { marginTop: 40 }]} onPress={confirmOTP}>
-              <Text style={styles.buttonText}>NEXT</Text>
+
+            <TouchableOpacity
+              style={[styles.button, { marginTop: 40 }, loading && styles.buttonDisabled]}
+              onPress={confirmOTP}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.buttonText}>VERIFY</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.resendButton}
+              onPress={() => { setConfirm(null); setVerificationCode(''); requestOTP(); }}
+              disabled={loading}
+            >
+              <Text style={styles.resendText}>Resend OTP</Text>
             </TouchableOpacity>
           </View>
         )}
-        
+
         <View style={styles.footer}>
           <Text style={styles.footerText}>from</Text>
-          <Text style={styles.footerBrand}>FACEBOOK</Text>
+          <Text style={styles.footerBrand}>META</Text>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -140,7 +188,7 @@ const styles = StyleSheet.create({
     marginBottom: 60,
   },
   link: {
-     color: '#34B7F1',
+    color: '#34B7F1',
   },
   inputSection: {
     width: '100%',
@@ -202,11 +250,23 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
   },
+  buttonDisabled: {
+    opacity: 0.7,
+  },
   buttonText: {
     color: '#fff',
     fontSize: 14,
     fontWeight: 'bold',
     letterSpacing: 1,
+  },
+  resendButton: {
+    marginTop: 20,
+    padding: 10,
+  },
+  resendText: {
+    color: Colors.secondary,
+    fontSize: 15,
+    fontWeight: '600',
   },
   footer: {
     paddingBottom: 40,

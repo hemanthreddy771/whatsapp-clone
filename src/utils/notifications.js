@@ -3,7 +3,8 @@ import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { doc, updateDoc } from 'firebase/firestore';
-import { db, auth } from '../config/firebase';
+import { db } from '../config/firebase';
+import auth from '@react-native-firebase/auth';
 
 // Configure how notifications are handled when the app is open
 Notifications.setNotificationHandler({
@@ -37,15 +38,15 @@ export const registerForPushNotificationsAsync = async () => {
       console.log('Failed to get push token for push notification!');
       return;
     }
-    
+
     // Project ID is required for Expo Push Tokens
     const projectId = Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId;
-    
+
     token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
-    
+
     // Save the token to the user's Firestore document
-    if (auth.currentUser) {
-      await updateDoc(doc(db, 'users', auth.currentUser.uid), {
+    if (auth().currentUser) {
+      await updateDoc(doc(db, 'users', auth().currentUser.uid), {
         pushToken: token,
       });
     }

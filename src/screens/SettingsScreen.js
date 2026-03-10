@@ -2,8 +2,8 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, Switch } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
-import { signOut } from 'firebase/auth';
-import { auth, db } from '../config/firebase';
+import auth from '@react-native-firebase/auth';
+import { db } from '../config/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 import * as LocalAuthentication from 'expo-local-authentication';
 
@@ -31,7 +31,7 @@ const SettingsScreen = () => {
     }
 
     try {
-      await updateDoc(doc(db, 'users', auth.currentUser.uid), {
+      await updateDoc(doc(db, 'users', auth().currentUser.uid), {
         privacyLockEnabled: value,
       });
       setUserData({ ...userData, privacyLockEnabled: value });
@@ -46,9 +46,9 @@ const SettingsScreen = () => {
       "Are you sure you want to logout?",
       [
         { text: "Cancel", style: "cancel" },
-        { 
-          text: "Logout", 
-          onPress: () => signOut(auth).catch(err => Alert.alert('Error', err.message)),
+        {
+          text: "Logout",
+          onPress: () => auth().signOut().catch(err => Alert.alert('Error', err.message)),
           style: "destructive"
         }
       ]
@@ -56,8 +56,8 @@ const SettingsScreen = () => {
   };
 
   const Option = ({ icon, label, last = false, color = '#000', onPress, children }) => (
-    <TouchableOpacity 
-      style={[styles.optionBtn, last && { borderBottomWidth: 0 }]} 
+    <TouchableOpacity
+      style={[styles.optionBtn, last && { borderBottomWidth: 0 }]}
       onPress={onPress}
       disabled={!!children}
     >
@@ -71,12 +71,12 @@ const SettingsScreen = () => {
 
   return (
     <View style={styles.container}>
-      
+
       {/* Profile Section */}
       <View style={styles.profileSection}>
-        <Image 
-          source={{ uri: userData?.photoURL || 'https://i.pravatar.cc/150' }} 
-          style={styles.avatar} 
+        <Image
+          source={{ uri: userData?.photoURL || 'https://i.pravatar.cc/150' }}
+          style={styles.avatar}
         />
         <View style={styles.profileInfo}>
           <Text style={styles.name}>{userData?.displayName || 'User'}</Text>
@@ -89,7 +89,7 @@ const SettingsScreen = () => {
         <Option icon="key-outline" label="Account" />
         <Option icon="chatbubbles-outline" label="Chats" />
         <Option icon="notifications-outline" label="Notifications" />
-        
+
         {isBiometricSupported && (
           <Option icon="lock-closed-outline" label="Privacy Lock">
             <Switch
@@ -102,11 +102,11 @@ const SettingsScreen = () => {
         )}
 
         <Option icon="help-circle-outline" label="Help" />
-        <Option 
-          icon="log-out-outline" 
-          label="Logout" 
-          last={true} 
-          color="#d32f2f" 
+        <Option
+          icon="log-out-outline"
+          label="Logout"
+          last={true}
+          color="#d32f2f"
           onPress={handleLogout}
         />
       </View>

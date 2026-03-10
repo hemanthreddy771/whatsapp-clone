@@ -10,7 +10,8 @@ import {
   FlatList,
   Image
 } from 'react-native';
-import { db, auth } from '../config/firebase';
+import { db } from '../config/firebase';
+import auth from '@react-native-firebase/auth';
 import { collection, onSnapshot, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
@@ -63,11 +64,11 @@ const ChatListScreen = ({ navigation }) => {
         Alert.alert('Not Found', 'No user found with this phone number.');
       } else {
         const foundUser = querySnapshot.docs[0].data();
-        if (foundUser.uid === auth.currentUser.uid) {
+        if (foundUser.uid === auth().currentUser.uid) {
           Alert.alert('Error', 'You cannot chat with yourself.');
         } else {
           navigation.navigate('ChatRoom', {
-            chatId: [auth.currentUser.uid, foundUser.uid].sort().join('_'),
+            chatId: [auth().currentUser.uid, foundUser.uid].sort().join('_'),
             chatName: foundUser.displayName
           });
         }

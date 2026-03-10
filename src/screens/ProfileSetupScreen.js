@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { doc, setDoc } from 'firebase/firestore';
-import { auth, db } from '../config/firebase';
+import auth from '@react-native-firebase/auth';
+import { db } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { registerForPushNotificationsAsync } from '../utils/notifications';
@@ -22,16 +23,16 @@ const ProfileSetupScreen = ({ navigation }) => {
       const pushToken = await registerForPushNotificationsAsync();
 
       const userData = {
-        uid: auth.currentUser.uid,
+        uid: auth().currentUser.uid,
         displayName: name,
-        phoneNumber: auth.currentUser.phoneNumber,
-        photoURL: `https://i.pravatar.cc/150?u=${auth.currentUser.uid}`,
+        phoneNumber: auth().currentUser.phoneNumber,
+        photoURL: `https://i.pravatar.cc/150?u=${auth().currentUser.uid}`,
         createdAt: new Date().toISOString(),
         pushToken: pushToken || null,
         privacyLockEnabled: false,
       };
 
-      await setDoc(doc(db, 'users', auth.currentUser.uid), userData);
+      await setDoc(doc(db, 'users', auth().currentUser.uid), userData);
       setUserData(userData);
       navigation.replace('Main');
     } catch (error) {
