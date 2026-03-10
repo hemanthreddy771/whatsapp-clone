@@ -48,10 +48,15 @@
         "expo-build-properties",
         {
           "android": {
-            "kotlinVersion": "1.9.22",
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 34,
             "packagingOptions": {
-              "pickFirst": ["**/libc++_shared.so"]
-            }
+              "pickFirst": [
+                "**/libc++_shared.so"
+              ]
+            },
+            "extraProguardRules": "-keep class io.agora.** { *; }",
+            "usesCleartextTraffic": true
           }
         }
       ]
