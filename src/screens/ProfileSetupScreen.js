@@ -50,14 +50,6 @@ const ProfileSetupScreen = ({ navigation }) => {
 
     setLoading(true);
     try {
-      // Don't let push notification failure break the profile setup
-      let pushToken = null;
-      try {
-        pushToken = await registerForPushNotificationsAsync();
-      } catch (pushErr) {
-        console.log("Push token error:", pushErr);
-      }
-
       const user = auth().currentUser;
       const uid = user?.uid;
       const phoneNumber = user?.phoneNumber || '';
@@ -69,7 +61,19 @@ const ProfileSetupScreen = ({ navigation }) => {
       }
 
       console.log('Uploading image...');
-      const photoURL = await uploadProfileImage(imageUri, uid);
+      let photoURL = `https://i.pravatar.cc/150?u=${uid}`;
+      if (imageUri) {
+        try {
+          // 10 second timeout for image upload to prevent hanging
+          const uploadPromise = uploadProfileImage(imageUri, uid);
+          const timeoutPromise = new Promise((resolve, reject) =>
+            setTimeout(() => reject(new Error("Image upload timeout")), 10000)
+          );
+          photoURL = await Promise.race([uploadPromise, timeoutPromise]);
+        } catch (e) {
+          console.log("Skipping image upload due to timeout/error:", e.message);
+        }
+      }
 
       const userData = {
         uid: uid,
@@ -77,19 +81,27 @@ const ProfileSetupScreen = ({ navigation }) => {
         phoneNumber: phoneNumber,
         photoURL: photoURL,
         createdAt: new Date().toISOString(),
-        pushToken: pushToken || null,
         privacyLockEnabled: false,
       };
 
       console.log('Saving profile data to Firestore...');
-      await nativeDb.collection('users').doc(uid).set(userData);
+      // 10 second timeout for database write
+      const savePromise = nativeDb.collection('users').doc(uid).set(userData);
+      const dbTimeout = new Promise((resolve, reject) =>
+        setTimeout(() => reject(new Error("Database save timeout. Check your internet or Firebase Rules.")), 10000)
+      );
+
+      await Promise.race([savePromise, dbTimeout]);
 
       console.log('Profile saved successfully, navigating to Main');
+
+      // Start push notification flow entirely in the background so it never blocks the UI!
+      registerForPushNotificationsAsync().catch(err => console.log('Background push setup failed:', err));
+
       setUserData(userData);
-      // Removed navigation.replace because AppNavigator reacts to userData being set
     } catch (error) {
       console.error("Profile saving error:", error);
-      Alert.alert('Error', 'Failed to save profile: ' + error.message);
+      Alert.alert('Error', error.message || 'Failed to save profile. Please try again.');
     }
     setLoading(false);
   };
