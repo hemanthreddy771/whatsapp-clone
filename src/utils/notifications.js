@@ -46,9 +46,13 @@ export const registerForPushNotificationsAsync = async () => {
     // Save the token to the user's Firestore document
     const user = auth().currentUser;
     if (user) {
-      await db.collection('users').doc(user.uid).update({
-        pushToken: token,
-      });
+      try {
+        await db.collection('users').doc(user.uid).update({
+          pushToken: token,
+        });
+      } catch (err) {
+        console.log("Failed to update push token in Firestore", err);
+      }
     }
   } else {
     console.log('Must use physical device for Push Notifications');
