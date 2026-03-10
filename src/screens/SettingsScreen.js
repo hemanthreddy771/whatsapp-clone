@@ -3,8 +3,8 @@ import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, Switch } from '
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import auth from '@react-native-firebase/auth';
-import { db } from '../config/firebase';
-import { doc, updateDoc } from 'firebase/firestore';
+import { nativeDb as db } from '../config/firebase';
+// import { doc, updateDoc } from 'firebase/firestore';
 import * as LocalAuthentication from 'expo-local-authentication';
 
 const SettingsScreen = () => {
@@ -31,7 +31,7 @@ const SettingsScreen = () => {
     }
 
     try {
-      await updateDoc(doc(db, 'users', auth().currentUser.uid), {
+      await db.collection('users').doc(auth().currentUser.uid).update({
         privacyLockEnabled: value,
       });
       setUserData({ ...userData, privacyLockEnabled: value });

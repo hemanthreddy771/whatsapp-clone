@@ -1,7 +1,6 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import auth from '@react-native-firebase/auth';
-import { db } from '../config/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { nativeDb as db } from '../config/firebase';
 
 const AuthContext = createContext();
 
@@ -17,8 +16,8 @@ export const AuthProvider = ({ children }) => {
       if (authenticatedUser) {
         // Fetch additional user data (name, avatar) from Firestore
         try {
-          const userDoc = await getDoc(doc(db, 'users', authenticatedUser.uid));
-          if (userDoc.exists()) {
+          const userDoc = await db.collection('users').doc(authenticatedUser.uid).get();
+          if (userDoc.exists) {
             setUserData(userDoc.data());
           }
         } catch (error) {

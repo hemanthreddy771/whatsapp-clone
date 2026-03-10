@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Image, ActivityIndicator } from 'react-native';
-import { doc, setDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import auth from '@react-native-firebase/auth';
-import { db, storage } from '../config/firebase';
+import { nativeDb, storage } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { registerForPushNotificationsAsync } from '../utils/notifications';
@@ -18,7 +16,6 @@ const ProfileSetupScreen = ({ navigation }) => {
   const { setUserData } = useAuth();
 
   const pickImage = async () => {
-    // No permissions required to launch the image library
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
@@ -35,15 +32,12 @@ const ProfileSetupScreen = ({ navigation }) => {
     if (!uri) return `https://i.pravatar.cc/150?u=${uid}`;
 
     try {
-      const response = await fetch(uri);
-      const blob = await response.blob();
-      const storageRef = ref(storage, `profile_images/${uid}`);
-      await uploadBytes(storageRef, blob);
-      const downloadURL = await getDownloadURL(storageRef);
+      const storageRef = storage.ref(`profile_images/${uid}`);
+      await storageRef.putFile(uri);
+      const downloadURL = await storageRef.getDownloadURL();
       return downloadURL;
     } catch (error) {
       console.error("Image upload failed:", error);
-      // Fallback to default if upload fails but don't break profile creation
       return `https://i.pravatar.cc/150?u=${uid}`;
     }
   };
@@ -74,6 +68,7 @@ const ProfileSetupScreen = ({ navigation }) => {
         return;
       }
 
+      console.log('Uploading image...');
       const photoURL = await uploadProfileImage(imageUri, uid);
 
       const userData = {
@@ -86,9 +81,12 @@ const ProfileSetupScreen = ({ navigation }) => {
         privacyLockEnabled: false,
       };
 
-      await setDoc(doc(db, 'users', uid), userData);
+      console.log('Saving profile data to Firestore...');
+      await nativeDb.collection('users').doc(uid).set(userData);
+
+      console.log('Profile saved successfully, navigating to Main');
       setUserData(userData);
-      navigation.replace('Main');
+      // Removed navigation.replace because AppNavigator reacts to userData being set
     } catch (error) {
       console.error("Profile saving error:", error);
       Alert.alert('Error', 'Failed to save profile: ' + error.message);

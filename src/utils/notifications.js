@@ -2,8 +2,7 @@ import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
-import { doc, updateDoc } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { nativeDb as db } from '../config/firebase';
 import auth from '@react-native-firebase/auth';
 
 // Configure how notifications are handled when the app is open
@@ -45,8 +44,9 @@ export const registerForPushNotificationsAsync = async () => {
     token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
 
     // Save the token to the user's Firestore document
-    if (auth().currentUser) {
-      await updateDoc(doc(db, 'users', auth().currentUser.uid), {
+    const user = auth().currentUser;
+    if (user) {
+      await db.collection('users').doc(user.uid).update({
         pushToken: token,
       });
     }

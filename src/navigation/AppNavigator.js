@@ -15,8 +15,8 @@ import * as Notifications from 'expo-notifications';
 import { useEffect, useState, useRef } from 'react';
 import { AppState } from 'react-native';
 
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../config/firebase';
+// import { doc, getDoc } from 'firebase/firestore';
+import { nativeDb as db } from '../config/firebase';
 import { sendPushNotification } from '../utils/notifications';
 import LockScreen from '../screens/LockScreen';
 import Colors from '../constants/Colors';
@@ -135,8 +135,8 @@ const AppNavigator = () => {
 
                         // Notify the other user about the call
                         const receiverId = route.params.chatId.replace(user.uid, '').replace('_', '');
-                        const receiverDoc = await getDoc(doc(db, 'users', receiverId));
-                        if (receiverDoc.exists() && receiverDoc.data().pushToken) {
+                        const receiverDoc = await db.collection('users').doc(receiverId).get();
+                        if (receiverDoc.exists && receiverDoc.data().pushToken) {
                           await sendPushNotification(
                             receiverDoc.data().pushToken,
                             '🎥 Incoming Video Call',
@@ -159,8 +159,8 @@ const AppNavigator = () => {
 
                         // Notify the other user about the call
                         const receiverId = route.params.chatId.replace(user.uid, '').replace('_', '');
-                        const receiverDoc = await getDoc(doc(db, 'users', receiverId));
-                        if (receiverDoc.exists() && receiverDoc.data().pushToken) {
+                        const receiverDoc = await db.collection('users').doc(receiverId).get();
+                        if (receiverDoc.exists && receiverDoc.data().pushToken) {
                           await sendPushNotification(
                             receiverDoc.data().pushToken,
                             '📞 Incoming Audio Call',

@@ -1,6 +1,8 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
+import firestore from '@react-native-firebase/firestore';
+import storage_module from '@react-native-firebase/storage';
+
 const firebaseConfig = {
   apiKey: "AIzaSyDV2c0G_k3bChtZxlBLnmJzRJoIU0vfnFM",
   authDomain: "whatsapp-clone-7c929.firebaseapp.com",
@@ -11,9 +13,14 @@ const firebaseConfig = {
   measurementId: "G-MNPXZ5HDNE"
 };
 
-// Initialize Firebase
+// Initialize Firebase Web SDK for parts of the app that still use it
 const app = initializeApp(firebaseConfig);
 
-// Firestore is still initialized with the web SDK for data access
+// Web SDK Firestore (used by old screens like ChatRoom)
 export const db = getFirestore(app);
-export const storage = getStorage(app);
+
+// Native SDK Firestore (used by Profile Setup to ensure Native Auth token is sent)
+export const nativeDb = firestore();
+
+// Native SDK Storage (avoids blob freezing issues)
+export const storage = storage_module();
