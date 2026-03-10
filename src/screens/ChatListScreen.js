@@ -8,7 +8,8 @@ import {
   Text,
   Alert,
   FlatList,
-  Image
+  Image,
+  Share
 } from 'react-native';
 import { db } from '../config/firebase';
 import auth from '@react-native-firebase/auth';
@@ -47,6 +48,17 @@ const ChatListScreen = ({ navigation }) => {
 
     return () => unsubscribe();
   }, [user]);
+
+  const onInvite = async () => {
+    try {
+      const result = await Share.share({
+        message:
+          'Hey! I am using this cool WhatsApp Clone app. Join me so we can chat securely! 🚀',
+      });
+    } catch (error) {
+      Alert.alert('Error', error.message);
+    }
+  };
 
   const handleSearchUser = async () => {
     const cleanNumber = searchNumber.trim();
@@ -152,6 +164,9 @@ const ChatListScreen = ({ navigation }) => {
             <Text style={styles.emptySubtitle}>
               Tap the + button to start a new chat by phone number.
             </Text>
+            <TouchableOpacity style={styles.inviteButton} onPress={onInvite}>
+              <Text style={styles.inviteText}>INVITE FRIENDS</Text>
+            </TouchableOpacity>
           </View>
         }
       />
@@ -267,7 +282,25 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
     marginTop: 10,
-  }
+  },
+  inviteButton: {
+    marginTop: 30,
+    backgroundColor: Colors.accent,
+    paddingHorizontal: 25,
+    paddingVertical: 12,
+    borderRadius: 25,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1.41,
+  },
+  inviteText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 14,
+    letterSpacing: 0.5,
+  },
 });
 
 export default ChatListScreen;
