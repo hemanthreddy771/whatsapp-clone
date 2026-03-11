@@ -17,6 +17,7 @@ const VideoCallingScreen = ({ navigation, route }) => {
   const [remoteUid, setRemoteUid] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(callType === 'audio');
+  const [isSpeakerOn, setIsSpeakerOn] = useState(callType === 'video'); // Video defaults to speaker, audio to earpiece
 
   useEffect(() => {
     setupVideoSDKEngine();
@@ -56,6 +57,9 @@ const VideoCallingScreen = ({ navigation, route }) => {
         clientRoleType: ClientRoleType.ClientRoleBroadcaster,
         channelProfile: ChannelProfileType.ChannelProfileCommunication,
       });
+
+      // Set initial speaker state
+      engine.setEnableSpeakerphone(isSpeakerOn);
     } catch (e) {
       console.error(e);
     }
@@ -75,6 +79,12 @@ const VideoCallingScreen = ({ navigation, route }) => {
   const switchCamera = () => {
     if (callType === 'audio') return;
     agoraEngine.current?.switchCamera();
+  };
+
+  const toggleSpeaker = () => {
+    const newState = !isSpeakerOn;
+    agoraEngine.current?.setEnableSpeakerphone(newState);
+    setIsSpeakerOn(newState);
   };
 
   return (
@@ -129,6 +139,13 @@ const VideoCallingScreen = ({ navigation, route }) => {
           onPress={toggleMute}
         >
           <Ionicons name={isMuted ? "mic-off" : "mic"} size={28} color={isMuted ? "#000" : "#fff"} />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.controlButton, isSpeakerOn && styles.activeControl]}
+          onPress={toggleSpeaker}
+        >
+          <Ionicons name={isSpeakerOn ? "volume-high" : "volume-mute"} size={28} color={isSpeakerOn ? "#000" : "#fff"} />
         </TouchableOpacity>
 
         <TouchableOpacity
