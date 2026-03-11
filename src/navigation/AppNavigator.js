@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { TouchableOpacity, View, Text } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
-import { createStackNavigator } from '@react-navigation/stack';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import TabNavigator from './TabNavigator';
 import ChatRoomScreen from '../screens/ChatRoomScreen';
 import LoginScreen from '../screens/LoginScreen';
@@ -18,7 +18,7 @@ import firestore from '@react-native-firebase/firestore';
 
 import Colors from '../constants/Colors';
 
-const Stack = createStackNavigator();
+const Stack = createNativeStackNavigator();
 
 const AppNavigator = () => {
   const { user, userData, loading } = useAuth();
