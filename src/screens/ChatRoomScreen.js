@@ -112,7 +112,9 @@ const ChatRoomScreen = ({ route }) => {
         lastMessageTime: firestore.FieldValue.serverTimestamp(),
         lastMessageSenderId: user.uid,
         participants: participants,
-        chatName: chatName,
+        // Store individual names so each user sees the correct counterpart
+        [`name_${user.uid}`]: userData?.displayName || 'Unknown',
+        ...(chatName && chatName !== 'Chat' ? { [`name_${receiverId}`]: chatName } : {}),
       }, { merge: true });
 
       // Handle push notifications

@@ -25,7 +25,9 @@ const ChatListScreen = ({ navigation }) => {
   const [isSearching, setIsSearching] = useState(false);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user?.uid) return;
+
+    console.log("Setting up chat listener for:", user.uid);
 
     // Use Native SDK syntax for real-time listener
     const unsubscribe = db.collection('chats')
@@ -33,6 +35,7 @@ const ChatListScreen = ({ navigation }) => {
       .orderBy('lastMessageTime', 'desc')
       .onSnapshot((snapshot) => {
         if (snapshot) {
+          console.log("Chat update received! Count:", snapshot.size);
           const fetchedChats = snapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data(),
@@ -46,7 +49,7 @@ const ChatListScreen = ({ navigation }) => {
       });
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user?.uid]);
 
   const onInvite = async () => {
     try {
@@ -60,7 +63,6 @@ const ChatListScreen = ({ navigation }) => {
   };
 
   const handleSearchUser = async () => {
-    // IMPORTANT: Remove ALL spaces and special characters for the search
     const cleanNumber = searchNumber.replace(/[^\d+]/g, '');
 
     if (cleanNumber.length < 10) {
@@ -70,7 +72,6 @@ const ChatListScreen = ({ navigation }) => {
 
     setIsSearching(true);
     try {
-      // Use Native SDK syntax for one-time fetch
       const querySnapshot = await db.collection('users')
         .where('phoneNumber', '==', cleanNumber)
         .get();
@@ -82,8 +83,11 @@ const ChatListScreen = ({ navigation }) => {
         if (foundUser.uid === auth().currentUser.uid) {
           Alert.alert('Note', 'This is your own number!');
         } else {
+          // Calculate chatId
+          const chatId = [auth().currentUser.uid, foundUser.uid].sort().join('_');
+
           navigation.navigate('ChatRoom', {
-            chatId: [auth().currentUser.uid, foundUser.uid].sort().join('_'),
+            chatId: chatId,
             chatName: foundUser.displayName
           });
         }
@@ -97,17 +101,21 @@ const ChatListScreen = ({ navigation }) => {
   };
 
   const renderChatItem = ({ item }) => {
-    // Native SDK toDate() helper for compatibility if available, or handle metadata
-    const lastMessageTime = item.lastMessageTime?.toDate ? item.lastMessageTime.toDate() : null;
+    // Robust time formatting for the last message
+    const lastMessageTime = (item.lastMessageTime && typeof item.lastMessageTime.toDate === 'function') ? item.lastMessageTime.toDate() : null;
     const timeString = lastMessageTime ?
       lastMessageTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+
+    // Intelligently find the OTHER person's name from the chat data
+    const otherParticipantId = (item.participants || []).find(id => id !== user?.uid);
+    const displayName = item[`name_${otherParticipantId}`] || item.chatName || 'Unknown';
 
     return (
       <TouchableOpacity
         style={styles.chatItem}
         onPress={() => navigation.navigate('ChatRoom', {
           chatId: item.id,
-          chatName: item.chatName
+          chatName: displayName
         })}
       >
         <View style={styles.avatarContainer}>
@@ -118,11 +126,11 @@ const ChatListScreen = ({ navigation }) => {
 
         <View style={styles.chatInfo}>
           <View style={styles.chatHeader}>
-            <Text style={styles.chatName}>{item.chatName || 'Unknown'}</Text>
+            <Text style={styles.chatName}>{displayName}</Text>
             <Text style={styles.chatTime}>{timeString}</Text>
           </View>
           <Text style={styles.lastMessage} numberOfLines={1}>
-            {item.lastMessage || 'No messages yet'}
+            {item.lastMessage || 'No messages yet...'}
           </Text>
         </View>
       </TouchableOpacity>
@@ -167,7 +175,7 @@ const ChatListScreen = ({ navigation }) => {
             </View>
             <Text style={styles.emptyTitle}>No chats yet</Text>
             <Text style={styles.emptySubtitle}>
-              Tap the + button to start a new chat by phone number.
+              Enter a number and tap + to start a chat.
             </Text>
             <TouchableOpacity style={styles.inviteButton} onPress={onInvite}>
               <Text style={styles.inviteText}>INVITE FRIENDS</Text>
