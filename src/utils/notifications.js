@@ -19,10 +19,22 @@ export const registerForPushNotificationsAsync = async () => {
 
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('default', {
-      name: 'default',
+      name: 'Default',
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#FF231F7C',
+    });
+
+    // Create a specific channel for calls with extreme importance and wake-up settings
+    await Notifications.setNotificationChannelAsync('calls', {
+      name: 'Calls',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 500, 500, 500, 500, 500, 500, 500],
+      lightColor: '#25D366',
+      sound: 'default', // In a real app, you can use a custom audio file path
+      bypassDnd: true,
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      showBadge: true,
     });
   }
 
@@ -38,20 +50,34 @@ export const registerForPushNotificationsAsync = async () => {
       return;
     }
 
-    // Project ID is required for Expo Push Tokens
-    const projectId = Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId;
+    // Hardcoding the Project ID for standalone builds ensures reliability
+    const projectId = "c73748d0-5f0f-477a-b1dd-d6b3e2c49ae8";
 
-    token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
-
-    // Save the token to the user's Firestore document
-    const user = auth().currentUser;
-    if (user) {
+    try {
+      const response = await Notifications.getExpoPushTokenAsync({ projectId });
+      token = response.data;
+      console.log('Push token generated:', token);
+    } catch (err) {
+      console.log('Error getting push token with projectId, trying fallback...', err);
       try {
-        await db.collection('users').doc(user.uid).update({
+        const fallback = await Notifications.getExpoPushTokenAsync();
+        token = fallback.data;
+      } catch (innerErr) {
+        console.log('Final fallback failed for token:', innerErr);
+      }
+    }
+
+    // Save/Update the token to the user document in Firestore using Native SDK
+    const currentUser = auth().currentUser;
+    if (currentUser && token) {
+      try {
+        await db.collection('users').doc(currentUser.uid).set({
           pushToken: token,
-        });
-      } catch (err) {
-        console.log("Failed to update push token in Firestore", err);
+          lastTokenSync: new Date().toISOString()
+        }, { merge: true });
+        console.log('Push token saved to Firestore for user:', currentUser.uid);
+      } catch (dbErr) {
+        console.log("Failed to save push token to Firestore", dbErr);
       }
     }
   } else {
@@ -61,23 +87,37 @@ export const registerForPushNotificationsAsync = async () => {
   return token;
 };
 
-// Function to send a notification (typically done via Cloud Functions, but we can call Expo's API directly for demo)
+// Function to send a notification via Expo's Push API
 export const sendPushNotification = async (expoPushToken, title, body, data = {}) => {
+  if (!expoPushToken) {
+    console.log("Aborted sending notification: No push token provided.");
+    return;
+  }
+
   const message = {
     to: expoPushToken,
     sound: 'default',
     title: title,
     body: body,
     data: data,
+    priority: 'high', // Critical for waking up Android devices
+    channelId: data.isCall ? 'calls' : 'default',
+    _displayInForeground: true, // Specific for older Expo versions compatibility
   };
 
-  await fetch('https://exp.host/--/api/v2/push/send', {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      'Accept-encoding': 'gzip, deflate',
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(message),
-  });
+  try {
+    const response = await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Accept-encoding': 'gzip, deflate',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(message),
+    });
+    const result = await response.json();
+    console.log("Notification send result:", result);
+  } catch (error) {
+    console.error("Error calling Expo Push API:", error);
+  }
 };
