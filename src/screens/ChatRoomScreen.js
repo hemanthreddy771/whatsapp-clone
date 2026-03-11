@@ -10,10 +10,15 @@ import {
   Platform,
   ImageBackground,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  Image,
+  Modal,
+  Dimensions
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import * as MediaLibrary from 'expo-media-library';
+import * as FileSystem from 'expo-file-system';
 import MessageBubble from '../components/MessageBubble';
 import { nativeDb as db, storage } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
@@ -22,21 +27,41 @@ import firestore from '@react-native-firebase/firestore';
 
 import Colors from '../constants/Colors';
 
-const ChatRoomScreen = ({ route }) => {
-  const { chatId, chatName } = route.params || { chatId: 'general_room', chatName: 'Chat' };
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+const ChatRoomScreen = ({ route, navigation }) => {
+  const { chatId, chatName, chatPhoto } = route.params || { chatId: 'general_room', chatName: 'Chat' };
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const { user, userData } = useAuth();
+  const [selectedMedia, setSelectedMedia] = useState(null);
 
   const [isOtherTyping, setIsOtherTyping] = useState(false);
   const typingTimeoutRef = useRef(null);
   const flatListRef = useRef(null);
 
+  // Set header with profile photo
+  useEffect(() => {
+    navigation.setOptions({
+      headerTitle: () => (
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <View style={styles.headerAvatar}>
+            {chatPhoto ? (
+              <Image source={{ uri: chatPhoto }} style={styles.headerAvatarImg} />
+            ) : (
+              <Ionicons name="person" size={18} color="#fff" />
+            )}
+          </View>
+          <Text style={{ color: '#fff', fontSize: 18, fontWeight: '600' }}>{chatName}</Text>
+        </View>
+      ),
+    });
+  }, [chatName, chatPhoto]);
+
   useEffect(() => {
     if (!chatId || !user?.uid) return;
 
-    // Use ONLY Native SDK methods
     const unsubscribe = db.collection('chats')
       .doc(chatId)
       .collection('messages')
@@ -48,10 +73,21 @@ const ChatRoomScreen = ({ route }) => {
             ...doc.data(),
           }));
           setMessages(fetchedMessages);
+
+          // Mark unread messages from OTHER user as "delivered"
+          snapshot.docs.forEach(doc => {
+            const msg = doc.data();
+            if (msg.senderId !== user.uid && msg.status === 'sent') {
+              doc.ref.update({ status: 'delivered' });
+            }
+            // Mark as "read" since user is viewing
+            if (msg.senderId !== user.uid && (msg.status === 'sent' || msg.status === 'delivered')) {
+              doc.ref.update({ status: 'read' });
+            }
+          });
         }
       }, (err) => console.log("Message fetch error:", err));
 
-    // Listen for other user's typing status safely using Native SDK
     const unsubscribeTyping = db.collection('chats').doc(chatId).onSnapshot((docSnap) => {
       if (docSnap && docSnap.exists && user?.uid) {
         const data = docSnap.data();
@@ -64,11 +100,11 @@ const ChatRoomScreen = ({ route }) => {
       }
     }, (err) => console.log("Typing fetch error:", err));
 
-    // Clear unread count for current user when visiting
+    // Clear unread count
     if (user?.uid && chatId) {
       db.collection('chats').doc(chatId).set({
         [`unreadCount_${user.uid}`]: 0
-      }, { merge: true }).catch(err => console.log("Clear unread error:", err));
+      }, { merge: true }).catch(() => {});
     }
 
     return () => {
@@ -79,21 +115,18 @@ const ChatRoomScreen = ({ route }) => {
 
   const handleTextChange = (text) => {
     setInputText(text);
-
     if (!user?.uid || !chatId) return;
 
-    // Update typing status in Firestore using Native SDK
     db.collection('chats').doc(chatId).set({
       [`typing_${user.uid}`]: true
-    }, { merge: true }).catch(e => console.log("Typing update error:", e));
+    }, { merge: true }).catch(() => {});
 
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-
     typingTimeoutRef.current = setTimeout(() => {
       if (user?.uid && chatId) {
         db.collection('chats').doc(chatId).set({
           [`typing_${user.uid}`]: false
-        }, { merge: true }).catch(e => console.log("Typing stop error:", e));
+        }, { merge: true }).catch(() => {});
       }
     }, 2000);
   };
@@ -104,16 +137,12 @@ const ChatRoomScreen = ({ route }) => {
       'Are you sure you want to delete this message?',
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
+        { 
+          text: 'Delete', 
           style: 'destructive',
           onPress: () => {
-            db.collection('chats')
-              .doc(chatId)
-              .collection('messages')
-              .doc(message.id)
-              .delete()
-              .catch(err => Alert.alert('Error', 'Failed to delete message'));
+            db.collection('chats').doc(chatId).collection('messages').doc(message.id)
+              .delete().catch(() => Alert.alert('Error', 'Failed to delete'));
           }
         }
       ]
@@ -123,7 +152,7 @@ const ChatRoomScreen = ({ route }) => {
   const pickMedia = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Allow access to your gallery to send photos/videos.');
+      Alert.alert('Permission needed', 'Allow access to your gallery.');
       return;
     }
 
@@ -133,26 +162,40 @@ const ChatRoomScreen = ({ route }) => {
     });
 
     if (!result.canceled) {
-      uploadMedia(result.assets[0].uri, result.assets[0].type);
+      uploadMedia(result.assets[0].uri, result.assets[0].type || 'image');
     }
   };
 
   const uploadMedia = async (uri, type) => {
     setIsUploading(true);
     try {
-      const filename = uri.substring(uri.lastIndexOf('/') + 1);
+      const filename = Date.now() + '_' + uri.substring(uri.lastIndexOf('/') + 1);
       const reference = storage.ref(`chats/${chatId}/${filename}`);
-
-      // Use putFile for native reliability
       await reference.putFile(uri);
       const downloadURL = await reference.getDownloadURL();
-
       sendMessage(null, downloadURL, type);
     } catch (error) {
-      console.error("Upload error:", error);
-      Alert.alert('Upload Error', 'Failed to send media.');
+       console.error("Upload error:", error);
+       Alert.alert('Upload Error', 'Failed to send media.');
     } finally {
-      setIsUploading(false);
+       setIsUploading(false);
+    }
+  };
+
+  const downloadMedia = async (url) => {
+    try {
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Allow storage access to save media.');
+        return;
+      }
+      const filename = 'whatsapp_' + Date.now() + '.jpg';
+      const fileUri = FileSystem.documentDirectory + filename;
+      const download = await FileSystem.downloadAsync(url, fileUri);
+      await MediaLibrary.saveToLibraryAsync(download.uri);
+      Alert.alert('Saved!', 'Media saved to your gallery.');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to download media.');
     }
   };
 
@@ -164,32 +207,32 @@ const ChatRoomScreen = ({ route }) => {
 
     try {
       const messageData = {
-        text: textToSend,
+        text: textToSend || '',
         createdAt: firestore.FieldValue.serverTimestamp(),
         senderId: user.uid,
         senderName: userData?.displayName || 'Unknown',
-        mediaUrl: mediaUrl,
-        mediaType: mediaType,
+        mediaUrl: mediaUrl || null,
+        mediaType: mediaType || null,
+        status: 'sent', // Start as sent (grey single tick)
       };
 
-      // Add message via Native SDK
       await db.collection('chats').doc(chatId).collection('messages').add(messageData);
 
-      // Update chat metadata for list view
       const receiverId = chatId.replace(user.uid, '').replace('_', '');
       const participants = [user.uid, receiverId];
 
       await db.collection('chats').doc(chatId).set({
-        lastMessage: mediaUrl ? `📷 ${mediaType === 'video' ? 'Video' : 'Photo'}` : textToSend,
+        lastMessage: mediaUrl ? (mediaType === 'video' ? '🎥 Video' : '📷 Photo') : textToSend,
         lastMessageTime: firestore.FieldValue.serverTimestamp(),
         lastMessageSenderId: user.uid,
         participants: participants,
         [`name_${user.uid}`]: userData?.displayName || 'Unknown',
+        [`photo_${user.uid}`]: userData?.photoURL || null,
         ...(chatName && chatName !== 'Chat' ? { [`name_${receiverId}`]: chatName } : {}),
+        ...(chatPhoto ? { [`photo_${receiverId}`]: chatPhoto } : {}),
         [`unreadCount_${receiverId}`]: firestore.FieldValue.increment(1)
       }, { merge: true });
 
-      // Handle push notifications
       if (receiverId) {
         const receiverDoc = await db.collection('users').doc(receiverId).get();
         if (receiverDoc.exists) {
@@ -209,6 +252,17 @@ const ChatRoomScreen = ({ route }) => {
     }
   };
 
+  const renderMessage = ({ item }) => (
+    <TouchableOpacity onLongPress={() => handleLongPressMessage(item)} activeOpacity={0.9}>
+      <MessageBubble
+        message={item}
+        isMine={item.senderId === user?.uid}
+        onMediaPress={(url) => setSelectedMedia(url)}
+        onDownload={(url) => downloadMedia(url)}
+      />
+    </TouchableOpacity>
+  );
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -225,18 +279,12 @@ const ChatRoomScreen = ({ route }) => {
         ref={flatListRef}
         data={messages}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <TouchableOpacity onLongPress={() => handleLongPressMessage(item)} activeOpacity={0.9}>
-            <MessageBubble
-              message={item}
-              isMine={item.senderId === user?.uid}
-            />
-          </TouchableOpacity>
-        )}
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-        onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
+        renderItem={renderMessage}
+        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+        onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
+        inverted={false}
       />
 
       {isOtherTyping && (
@@ -247,8 +295,8 @@ const ChatRoomScreen = ({ route }) => {
 
       {isUploading && (
         <View style={styles.uploadingBar}>
-          <ActivityIndicator size="small" color={Colors.secondary} />
-          <Text style={styles.uploadingText}>Sending media...</Text>
+            <ActivityIndicator size="small" color={Colors.secondary} />
+            <Text style={styles.uploadingText}>Sending media...</Text>
         </View>
       )}
 
@@ -277,92 +325,72 @@ const ChatRoomScreen = ({ route }) => {
           onPress={() => sendMessage()}
           disabled={isUploading}
         >
-          <Ionicons
-            name={inputText.length > 0 ? "send" : "mic"}
-            size={22}
-            color="#fff"
-          />
+          <Ionicons name={inputText.length > 0 ? "send" : "mic"} size={22} color="#fff" />
         </TouchableOpacity>
       </View>
+
+      {/* Full Screen Media Viewer Modal */}
+      <Modal visible={!!selectedMedia} transparent={true} animationType="fade" onRequestClose={() => setSelectedMedia(null)}>
+        <View style={styles.modalContainer}>
+          <TouchableOpacity style={styles.modalClose} onPress={() => setSelectedMedia(null)}>
+            <Ionicons name="close" size={30} color="#fff" />
+          </TouchableOpacity>
+          {selectedMedia && (
+            <Image source={{ uri: selectedMedia }} style={styles.fullImage} resizeMode="contain" />
+          )}
+          <TouchableOpacity style={styles.downloadBtn} onPress={() => { downloadMedia(selectedMedia); }}>
+            <Ionicons name="download-outline" size={24} color="#fff" />
+            <Text style={{color:'#fff', marginLeft: 8}}>Save to Gallery</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
+  container: { flex: 1, backgroundColor: Colors.background },
+  listContainer: { paddingVertical: 10, paddingBottom: 5 },
+  headerAvatar: {
+    width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.3)',
+    justifyContent: 'center', alignItems: 'center', marginRight: 10, overflow: 'hidden'
   },
-  listContainer: {
-    paddingVertical: 10,
-  },
+  headerAvatarImg: { width: 32, height: 32, borderRadius: 16 },
   inputArea: {
-    flexDirection: 'row',
-    padding: 8,
-    alignItems: 'flex-end',
-    backgroundColor: 'transparent',
+    flexDirection: 'row', padding: 8, alignItems: 'flex-end', backgroundColor: 'transparent',
   },
   inputWrapper: {
-    flex: 1,
-    flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderRadius: 25,
-    alignItems: 'center',
-    paddingHorizontal: 5,
-    marginRight: 8,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 1,
+    flex: 1, flexDirection: 'row', backgroundColor: '#fff', borderRadius: 25,
+    alignItems: 'center', paddingHorizontal: 5, marginRight: 8,
+    elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 1,
   },
   input: {
-    flex: 1,
-    minHeight: 45,
-    maxHeight: 120,
-    fontSize: 17,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    color: '#000',
+    flex: 1, minHeight: 45, maxHeight: 120, fontSize: 17, paddingHorizontal: 10, paddingVertical: 10, color: '#000',
   },
-  iconBtn: {
-    padding: 8,
-  },
+  iconBtn: { padding: 8 },
   sendButton: {
-    backgroundColor: Colors.secondary,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 1,
+    backgroundColor: Colors.secondary, width: 48, height: 48, borderRadius: 24,
+    justifyContent: 'center', alignItems: 'center', elevation: 2,
   },
-  typingIndicator: {
-    paddingHorizontal: 20,
-    paddingVertical: 5,
-    backgroundColor: 'transparent',
-  },
-  typingText: {
-    color: '#8696a0',
-    fontSize: 14,
-    fontStyle: 'italic',
-  },
+  typingIndicator: { paddingHorizontal: 20, paddingVertical: 5 },
+  typingText: { color: '#8696a0', fontSize: 14, fontStyle: 'italic' },
   uploadingBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 5,
-    backgroundColor: 'rgba(255,255,255,0.8)'
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 5, backgroundColor: 'rgba(255,255,255,0.8)'
   },
-  uploadingText: {
-    marginLeft: 10,
-    fontSize: 12,
-    color: '#666'
-  }
+  uploadingText: { marginLeft: 10, fontSize: 12, color: '#666' },
+  modalContainer: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center', alignItems: 'center',
+  },
+  modalClose: {
+    position: 'absolute', top: 50, right: 20, zIndex: 10, padding: 10,
+  },
+  fullImage: {
+    width: SCREEN_WIDTH, height: SCREEN_HEIGHT * 0.7,
+  },
+  downloadBtn: {
+    flexDirection: 'row', alignItems: 'center', position: 'absolute', bottom: 50,
+    backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 25,
+  },
 });
 
 export default ChatRoomScreen;
