@@ -9,7 +9,7 @@ import {
   RtcSurfaceView,
 } from 'react-native-agora';
 
-const appId = 'b85e3bfa8da140f3bb8c1a20687f9a7b'; // Replace with your Agora App ID
+const appId = 'd7b226d604b649de85589eb7c5fd0ad1'; // Replace with your Agora App ID
 
 const VideoCallingScreen = ({ navigation, route }) => {
   const { channelId, callType = 'video', callDocId } = route.params || {};
