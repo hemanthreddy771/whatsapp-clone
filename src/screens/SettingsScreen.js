@@ -4,8 +4,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import auth from '@react-native-firebase/auth';
 import { nativeDb as db } from '../config/firebase';
-// import { doc, updateDoc } from 'firebase/firestore';
 import * as LocalAuthentication from 'expo-local-authentication';
+import * as ImagePicker from 'expo-image-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const SettingsScreen = ({ navigation }) => {
   const { userData, setUserData } = useAuth();
@@ -93,6 +94,22 @@ const SettingsScreen = ({ navigation }) => {
       <View style={styles.optionsContainer}>
         <Option icon="key-outline" label="Account" />
         <Option icon="chatbubbles-outline" label="Chats" />
+        <Option icon="image-outline" label="Chat Wallpaper" onPress={async () => {
+          const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (status !== 'granted') {
+            Alert.alert('Permission needed', 'Allow gallery access to change wallpaper.');
+            return;
+          }
+          const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            quality: 0.8,
+          });
+          if (!result.canceled) {
+            await AsyncStorage.setItem('chat_wallpaper', result.assets[0].uri);
+            Alert.alert('Success', 'Chat wallpaper updated successfully!');
+          }
+        }} />
+
         <Option icon="notifications-outline" label="Notifications" />
 
         {isBiometricSupported && (

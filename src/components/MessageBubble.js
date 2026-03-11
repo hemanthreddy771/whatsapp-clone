@@ -3,9 +3,11 @@ import { View, Text, StyleSheet, Image, Dimensions, TouchableOpacity } from 'rea
 import Colors from '../constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
 
+import { Swipeable } from 'react-native-gesture-handler';
+
 const { width } = Dimensions.get('window');
 
-const MessageBubble = ({ message, isMine, onMediaPress, onDownload }) => {
+const MessageBubble = ({ message, isMine, onMediaPress, onDownload, onSwipeToReply }) => {
   const formatTime = (timestamp) => {
     if (!timestamp) return '';
     try {
@@ -75,17 +77,44 @@ const MessageBubble = ({ message, isMine, onMediaPress, onDownload }) => {
     );
   };
 
+  const renderLeftActions = () => {
+    return (
+      <View style={styles.replyAction}>
+        <Ionicons name="arrow-undo" size={24} color="#000" />
+      </View>
+    );
+  };
+
   return (
-    <View style={[styles.container, isMine ? styles.myMessageContainer : styles.otherMessageContainer]}>
-      <View style={[styles.bubble, isMine ? styles.myBubble : styles.otherBubble, message.mediaUrl && styles.mediaBubble]}>
-        {renderMedia()}
-        {message.text ? <Text style={styles.text}>{message.text}</Text> : null}
-        <View style={styles.bottomRow}>
-          <Text style={styles.time}>{formatTime(message.createdAt)}</Text>
-          {renderStatus()}
+    <Swipeable
+      friction={2}
+      leftThreshold={40}
+      renderLeftActions={renderLeftActions}
+      onSwipeableOpen={(direction) => {
+        if (direction === 'left' && onSwipeToReply) {
+          onSwipeToReply(message);
+        }
+      }}
+    >
+      <View style={[styles.container, isMine ? styles.myMessageContainer : styles.otherMessageContainer]}>
+        <View style={[styles.bubble, isMine ? styles.myBubble : styles.otherBubble, message.mediaUrl && styles.mediaBubble]}>
+          {message.replyTo && (
+            <View style={styles.replyBox}>
+              <Text style={styles.replyName} numberOfLines={1}>{message.replyTo.senderName}</Text>
+              <Text style={styles.replyText} numberOfLines={1}>
+                {message.replyTo.text || (message.replyTo.mediaType === 'video' ? '🎥 Video' : '📷 Photo')}
+              </Text>
+            </View>
+          )}
+          {renderMedia()}
+          {message.text ? <Text style={styles.text}>{message.text}</Text> : null}
+          <View style={styles.bottomRow}>
+            <Text style={styles.time}>{formatTime(message.createdAt)}</Text>
+            {renderStatus()}
+          </View>
         </View>
       </View>
-    </View>
+    </Swipeable>
   );
 };
 
@@ -132,6 +161,14 @@ const styles = StyleSheet.create({
   },
   time: { fontSize: 11, color: '#8696a0', marginTop: 2 },
   readStatus: { fontSize: 13, marginLeft: 3, fontWeight: 'bold' },
+  replyBox: {
+    backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: 5, padding: 5, marginBottom: 5, borderLeftWidth: 4, borderLeftColor: Colors.secondary
+  },
+  replyName: { fontSize: 13, fontWeight: 'bold', color: Colors.secondary },
+  replyText: { fontSize: 14, color: '#666', marginTop: 2 },
+  replyAction: {
+    justifyContent: 'center', alignItems: 'center', width: 50, height: '100%',
+  }
 });
 
 export default MessageBubble;

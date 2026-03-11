@@ -25,6 +25,7 @@ import { nativeDb as db, storage } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { sendPushNotification } from '../utils/notifications';
 import firestore from '@react-native-firebase/firestore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import Colors from '../constants/Colors';
 
@@ -37,10 +38,20 @@ const ChatRoomScreen = ({ route, navigation }) => {
   const [isUploading, setIsUploading] = useState(false);
   const { user, userData } = useAuth();
   const [selectedMedia, setSelectedMedia] = useState(null);
+  const [wallpaper, setWallpaper] = useState(null);
+  const [replyingTo, setReplyingTo] = useState(null);
 
   const [isOtherTyping, setIsOtherTyping] = useState(false);
   const typingTimeoutRef = useRef(null);
   const flatListRef = useRef(null);
+
+  useEffect(() => {
+    const loadWallpaper = async () => {
+      const savedWallpaper = await AsyncStorage.getItem('chat_wallpaper');
+      if (savedWallpaper) setWallpaper(savedWallpaper);
+    };
+    loadWallpaper();
+  }, []);
 
   // Set header with profile photo
   useEffect(() => {
@@ -66,7 +77,7 @@ const ChatRoomScreen = ({ route, navigation }) => {
     const unsubscribe = db.collection('chats')
       .doc(chatId)
       .collection('messages')
-      .orderBy('createdAt', 'asc')
+      .orderBy('createdAt', 'desc')
       .onSnapshot((snapshot) => {
         if (snapshot) {
           const fetchedMessages = snapshot.docs.map(doc => ({
@@ -204,7 +215,9 @@ const ChatRoomScreen = ({ route, navigation }) => {
     const textToSend = customText !== null ? customText : inputText;
     if ((!textToSend || textToSend.trim() === '') && !mediaUrl) return;
 
-    if (customText === null) setInputText('');
+    if (customText === null) {
+      setInputText('');
+    }
 
     try {
       const messageData = {
@@ -215,7 +228,15 @@ const ChatRoomScreen = ({ route, navigation }) => {
         mediaUrl: mediaUrl || null,
         mediaType: mediaType || null,
         status: 'sent', // Start as sent (grey single tick)
+        replyTo: replyingTo ? {
+          id: replyingTo.id,
+          senderName: replyingTo.senderName || 'Unknown',
+          text: replyingTo.text || null,
+          mediaType: replyingTo.mediaType || null,
+        } : null,
       };
+
+      setReplyingTo(null);
 
       await db.collection('chats').doc(chatId).collection('messages').add(messageData);
 
@@ -260,6 +281,7 @@ const ChatRoomScreen = ({ route, navigation }) => {
         isMine={item.senderId === user?.uid}
         onMediaPress={(url, type) => setSelectedMedia({ url, type })}
         onDownload={(url) => downloadMedia(url)}
+        onSwipeToReply={(msg) => setReplyingTo(msg)}
       />
     </TouchableOpacity>
   );
@@ -271,9 +293,9 @@ const ChatRoomScreen = ({ route, navigation }) => {
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
       <ImageBackground
-        source={{ uri: 'https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png' }}
+        source={{ uri: wallpaper || 'https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png' }}
         style={StyleSheet.absoluteFillObject}
-        imageStyle={{ opacity: 0.08 }}
+        imageStyle={{ opacity: wallpaper ? 1 : 0.08 }}
       />
 
       <FlatList
@@ -281,11 +303,9 @@ const ChatRoomScreen = ({ route, navigation }) => {
         data={messages}
         keyExtractor={(item) => item.id}
         renderItem={renderMessage}
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
-        onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
-        inverted={false}
+        inverted={true}
       />
 
       {isOtherTyping && (
@@ -302,32 +322,47 @@ const ChatRoomScreen = ({ route, navigation }) => {
       )}
 
       <View style={styles.inputArea}>
-        <View style={styles.inputWrapper}>
-          <TouchableOpacity style={styles.iconBtn}>
-            <Ionicons name="happy-outline" size={24} color="#8696a0" />
-          </TouchableOpacity>
-          <TextInput
-            style={styles.input}
-            placeholder="Message"
-            value={inputText}
-            onChangeText={handleTextChange}
-            multiline
-          />
-          <TouchableOpacity style={styles.iconBtn} onPress={pickMedia} disabled={isUploading}>
-            <Ionicons name="attach" size={24} color="#8696a0" style={{ transform: [{ rotate: '45deg' }] }} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.iconBtn} onPress={pickMedia} disabled={isUploading}>
-            <Ionicons name="camera" size={24} color="#8696a0" />
+        {replyingTo && (
+          <View style={styles.replyPreviewContainer}>
+            <View style={styles.replyPreviewInner}>
+              <Text style={styles.replyPreviewName}>{replyingTo.senderName}</Text>
+              <Text style={styles.replyPreviewText} numberOfLines={1}>
+                {replyingTo.text || (replyingTo.mediaType === 'video' ? '🎥 Video' : '📷 Photo')}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => setReplyingTo(null)} style={styles.replyPreviewClose}>
+              <Ionicons name="close-circle" size={24} color="#8696a0" />
+            </TouchableOpacity>
+          </View>
+        )}
+        <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
+          <View style={styles.inputWrapper}>
+            <TouchableOpacity style={styles.iconBtn}>
+              <Ionicons name="happy-outline" size={24} color="#8696a0" />
+            </TouchableOpacity>
+            <TextInput
+              style={styles.input}
+              placeholder="Message"
+              value={inputText}
+              onChangeText={handleTextChange}
+              multiline
+            />
+            <TouchableOpacity style={styles.iconBtn} onPress={pickMedia} disabled={isUploading}>
+              <Ionicons name="attach" size={24} color="#8696a0" style={{ transform: [{ rotate: '45deg' }] }} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.iconBtn} onPress={pickMedia} disabled={isUploading}>
+              <Ionicons name="camera" size={24} color="#8696a0" />
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity
+            style={styles.sendButton}
+            onPress={() => sendMessage()}
+            disabled={isUploading}
+          >
+            <Ionicons name={inputText.length > 0 ? "send" : "mic"} size={22} color="#fff" />
           </TouchableOpacity>
         </View>
-
-        <TouchableOpacity
-          style={styles.sendButton}
-          onPress={() => sendMessage()}
-          disabled={isUploading}
-        >
-          <Ionicons name={inputText.length > 0 ? "send" : "mic"} size={22} color="#fff" />
-        </TouchableOpacity>
       </View>
 
       {/* Full Screen Media Viewer Modal */}
@@ -367,11 +402,18 @@ const styles = StyleSheet.create({
   },
   headerAvatarImg: { width: 32, height: 32, borderRadius: 16 },
   inputArea: {
-    flexDirection: 'row', padding: 8, alignItems: 'flex-end', backgroundColor: 'transparent',
+    flexDirection: 'column', padding: 8, justifyContent: 'flex-end', backgroundColor: 'transparent',
   },
+  replyPreviewContainer: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: '#e5ddd5', borderRadius: 8, padding: 8, marginBottom: 5, borderLeftWidth: 4, borderLeftColor: Colors.secondary,
+  },
+  replyPreviewInner: { flex: 1 },
+  replyPreviewName: { color: Colors.secondary, fontWeight: 'bold', fontSize: 13 },
+  replyPreviewText: { color: '#666', fontSize: 13, marginTop: 2 },
+  replyPreviewClose: { padding: 5, marginLeft: 5 },
   inputWrapper: {
     flex: 1, flexDirection: 'row', backgroundColor: '#fff', borderRadius: 25,
-    alignItems: 'center', paddingHorizontal: 5, marginRight: 8,
+    alignItems: 'center', paddingHorizontal: 5,
     elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 1,
   },
   input: {
