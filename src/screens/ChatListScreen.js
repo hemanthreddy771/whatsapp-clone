@@ -11,6 +11,7 @@ import {
   Image,
   Share
 } from 'react-native';
+import { useIsFocused } from '@react-navigation/native';
 import { nativeDb as db } from '../config/firebase';
 import auth from '@react-native-firebase/auth';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +20,7 @@ import Colors from '../constants/Colors';
 
 const ChatListScreen = ({ navigation }) => {
   const { user } = useAuth();
+  const isFocused = useIsFocused();
   const [chats, setChats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchNumber, setSearchNumber] = useState('+91 ');
@@ -29,17 +31,27 @@ const ChatListScreen = ({ navigation }) => {
 
     console.log("Setting up chat listener for:", user.uid);
 
-    // Use Native SDK syntax for real-time listener
+    // We remove the .orderBy() from the server query.
+    // Firestore filters out documents where the ordered field is null.
+    // When sending a message, lastMessageTime is briefly null (serverTimestamp), 
+    // which can cause the chat to disappear or fail to update in the list.
     const unsubscribe = db.collection('chats')
       .where('participants', 'array-contains', user.uid)
-      .orderBy('lastMessageTime', 'desc')
       .onSnapshot((snapshot) => {
         if (snapshot) {
-          console.log("Chat update received! Count:", snapshot.size);
-          const fetchedChats = snapshot.docs.map(doc => ({
+          console.log("Got chat snapshot, size:", snapshot.size);
+          let fetchedChats = snapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data(),
           }));
+
+          // Sort in-memory based on timestamp
+          fetchedChats.sort((a, b) => {
+            const timeA = a.lastMessageTime?.toMillis ? a.lastMessageTime.toMillis() : (a.lastMessageTime || 0);
+            const timeB = b.lastMessageTime?.toMillis ? b.lastMessageTime.toMillis() : (b.lastMessageTime || 0);
+            return timeB - timeA;
+          });
+
           setChats(fetchedChats);
         }
         setLoading(false);
@@ -49,7 +61,7 @@ const ChatListScreen = ({ navigation }) => {
       });
 
     return () => unsubscribe();
-  }, [user?.uid]);
+  }, [user?.uid, isFocused]); // Re-subscribe or catch up when screen is focused
 
   const onInvite = async () => {
     try {
@@ -83,7 +95,6 @@ const ChatListScreen = ({ navigation }) => {
         if (foundUser.uid === auth().currentUser.uid) {
           Alert.alert('Note', 'This is your own number!');
         } else {
-          // Calculate chatId
           const chatId = [auth().currentUser.uid, foundUser.uid].sort().join('_');
 
           navigation.navigate('ChatRoom', {
@@ -101,12 +112,13 @@ const ChatListScreen = ({ navigation }) => {
   };
 
   const renderChatItem = ({ item }) => {
-    // Robust time formatting for the last message
-    const lastMessageTime = (item.lastMessageTime && typeof item.lastMessageTime.toDate === 'function') ? item.lastMessageTime.toDate() : null;
-    const timeString = lastMessageTime ?
-      lastMessageTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+    // Robust time formatting
+    let timeString = '';
+    if (item.lastMessageTime) {
+      const date = item.lastMessageTime.toDate ? item.lastMessageTime.toDate() : new Date(item.lastMessageTime);
+      timeString = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
 
-    // Intelligently find the OTHER person's name from the chat data
     const otherParticipantId = (item.participants || []).find(id => id !== user?.uid);
     const displayName = item[`name_${otherParticipantId}`] || item.chatName || 'Unknown';
 
@@ -137,7 +149,7 @@ const ChatListScreen = ({ navigation }) => {
     );
   };
 
-  if (loading) {
+  if (loading && chats.length === 0) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color={Colors.primary} />
@@ -168,6 +180,7 @@ const ChatListScreen = ({ navigation }) => {
         data={chats}
         keyExtractor={(item) => item.id}
         renderItem={renderChatItem}
+        extraData={isFocused} // Force re-render on focus
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <View style={styles.iconCircle}>
