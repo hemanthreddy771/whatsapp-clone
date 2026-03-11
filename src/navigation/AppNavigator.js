@@ -88,6 +88,10 @@ const AppNavigator = () => {
             <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
             <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} options={{ headerShown: false }} />
           </>
+        ) : !userData ? (
+          <>
+            <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} options={{ headerShown: false }} />
+          </>
         ) : (
           <>
             <Stack.Screen name="Main" component={TabNavigator} options={{ headerShown: false }} />

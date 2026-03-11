@@ -4,14 +4,15 @@ import { Ionicons } from '@expo/vector-icons';
 import Colors from '../constants/Colors';
 
 const IncomingCallScreen = ({ route, navigation }) => {
-    const { chatId, callerName, callType } = route.params || {};
+    const { channelId, chatId, callerName, callType } = route.params || {};
+    const callChannelId = channelId || chatId; // Support both param names
 
     // You would typically play a ringtone here
     // useEffect(() => { ... }, []);
 
     const handleAccept = () => {
         navigation.replace('VideoCalling', {
-            channelId: chatId,
+            channelId: callChannelId,
             callType: callType || 'video'
         });
     };

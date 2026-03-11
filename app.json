@@ -62,6 +62,21 @@
             "usesCleartextTraffic": true
           }
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#25D366",
+          "sounds": []
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow $(PRODUCT_NAME) to access your photos to send in chats.",
+          "cameraPermission": "Allow $(PRODUCT_NAME) to take photos for your profile or chats."
+        }
       ]
     ],
     "extra": {
