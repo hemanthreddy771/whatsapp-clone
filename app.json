@@ -69,14 +69,6 @@
         }
       ],
       [
-        "expo-notifications",
-        {
-          "icon": "./assets/images/icon.png",
-          "color": "#25D366",
-          "sounds": []
-        }
-      ],
-      [
         "expo-image-picker",
         {
           "photosPermission": "Allow $(PRODUCT_NAME) to access your photos to send in chats.",
@@ -88,6 +80,7 @@
       "eas": {
         "projectId": "c73748d0-5f0f-477a-b1dd-d6b3e2c49ae8"
       }
-    }
+    },
+    "owner": "hemanth1923"
   }
 }

@@ -1,123 +1,71 @@
-import * as Notifications from 'expo-notifications';
-import * as Device from 'expo-device';
-import Constants from 'expo-constants';
-import { Platform } from 'react-native';
-import { nativeDb as db } from '../config/firebase';
+import messaging from '@react-native-firebase/messaging';
 import auth from '@react-native-firebase/auth';
-
-// Configure how notifications are handled when the app is open
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+import { nativeDb as db } from '../config/firebase';
+import { Platform, PermissionsAndroid } from 'react-native';
 
 export const registerForPushNotificationsAsync = async () => {
   let token;
 
   if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('default', {
-      name: 'Default',
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#FF231F7C',
-    });
-
-    // Create a specific channel for calls with extreme importance and wake-up settings
-    await Notifications.setNotificationChannelAsync('calls', {
-      name: 'Calls',
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 500, 500, 500, 500, 500, 500, 500],
-      lightColor: '#25D366',
-      sound: 'default', // In a real app, you can use a custom audio file path
-      bypassDnd: true,
-      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-      showBadge: true,
-    });
-  }
-
-  if (Device.isDevice) {
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-    if (finalStatus !== 'granted') {
-      console.log('Failed to get push token for push notification!');
-      return;
-    }
-
-    // Hardcoding the Project ID for standalone builds ensures reliability
-    const projectId = "c73748d0-5f0f-477a-b1dd-d6b3e2c49ae8";
-
     try {
-      const response = await Notifications.getExpoPushTokenAsync({ projectId });
-      token = response.data;
-      console.log('Push token generated:', token);
-    } catch (err) {
-      console.log('Error getting push token with projectId, trying fallback...', err);
-      try {
-        const fallback = await Notifications.getExpoPushTokenAsync();
-        token = fallback.data;
-      } catch (innerErr) {
-        console.log('Final fallback failed for token:', innerErr);
-      }
-    }
+      await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);
+      const authStatus = await messaging().requestPermission();
 
-    // Save/Update the token to the user document in Firestore using Native SDK
-    const currentUser = auth().currentUser;
-    if (currentUser && token) {
-      try {
-        await db.collection('users').doc(currentUser.uid).set({
-          pushToken: token,
-          lastTokenSync: new Date().toISOString()
-        }, { merge: true });
-        console.log('Push token saved to Firestore for user:', currentUser.uid);
-      } catch (dbErr) {
-        console.log("Failed to save push token to Firestore", dbErr);
+      const enabled =
+        authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+        authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+
+      if (enabled) {
+        // Get native FCM token directly
+        token = await messaging().getToken();
+        console.log('FCM Token:', token);
+
+        // Save token to firestore for user
+        const currentUser = auth().currentUser;
+        if (currentUser && token) {
+          await db.collection('users').doc(currentUser.uid).set({
+            pushToken: token,
+            lastTokenSync: new Date().toISOString()
+          }, { merge: true });
+        }
       }
+    } catch (error) {
+      console.log('Failed to get FCM token:', error);
     }
-  } else {
-    console.log('Must use physical device for Push Notifications');
   }
 
   return token;
 };
 
-// Function to send a notification via Expo's Push API
-export const sendPushNotification = async (expoPushToken, title, body, data = {}) => {
-  if (!expoPushToken) {
+// Function to send FCM Data message directly via an edge function or mock endpoint
+// Note: Direct client-to-client FCM HTTP v1 calls require a secure backend because sending requires the Service Account key.
+// We are mimicking a server call payload here that a real backend would process.
+export const sendPushNotification = async (fcmToken, title, body, data = {}) => {
+  if (!fcmToken) {
     console.log("Aborted sending notification: No push token provided.");
     return;
   }
 
-  const message = {
-    to: expoPushToken,
-    sound: 'default',
-    title: title,
-    body: body,
-    data: data,
-    priority: 'high', // Critical for waking up Android devices
-    channelId: data.isCall ? 'calls' : 'default',
-    _displayInForeground: true, // Specific for older Expo versions compatibility
+  // To send real FCM from a client app without a custom backend, you typically use a Firebase Cloud function.
+  // Assuming a cloud function endpoint exists:
+  const payload = {
+    to: fcmToken,
+    notification: {
+      title: title,
+      body: body,
+      sound: "default",
+    },
+    data: {
+      ...data,
+      priority: 'high',
+    }
   };
 
   try {
-    const response = await fetch('https://exp.host/--/api/v2/push/send', {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Accept-encoding': 'gzip, deflate',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(message),
-    });
-    const result = await response.json();
-    console.log("Notification send result:", result);
+    // Note: Due to security, you cannot use the FCM v1 HTTP API directly from the react-native client
+    // without exposing your service account key. The app realistically needs a cloud function here.
+    console.log("Mocking server request to Firebase FCM with payload:", payload);
   } catch (error) {
-    console.error("Error calling Expo Push API:", error);
+    console.error("Error calling FCM:", error);
   }
 };

@@ -10,7 +10,7 @@ import IncomingCallScreen from '../screens/IncomingCallScreen';
 import ProfileEditScreen from '../screens/ProfileEditScreen';
 import { useAuth } from '../context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
-import * as Notifications from 'expo-notifications';
+import messaging from '@react-native-firebase/messaging';
 import { registerForPushNotificationsAsync, sendPushNotification } from '../utils/notifications';
 import { nativeDb as db } from '../config/firebase';
 import VideoCallingScreen from '../screens/VideoCallingScreen';
@@ -27,16 +27,17 @@ const AppNavigator = () => {
   useEffect(() => {
     if (!user) return;
 
-    // Register for push notifications
+    // Register for push notifications securely
     registerForPushNotificationsAsync();
 
     // Foreground notification listener
-    const notificationListener = Notifications.addNotificationReceivedListener(notification => {
-      console.log('Notification received in foreground:', notification);
-      const { isCall, chatId, callerName, callType } = notification.request.content.data;
+    const unsubscribeOnMessage = messaging().onMessage(async remoteMessage => {
+      console.log('Notification received in foreground:', remoteMessage);
+      const data = remoteMessage.data || {};
+      const { isCall, chatId, callerName, callType } = data;
 
       // If it's a call, we should show the incoming call screen immediately if the user is in the app
-      if (isCall && chatId) {
+      if (isCall === 'true' && chatId) {
         navigationRef.current?.navigate('IncomingCall', {
           channelId: chatId,
           callerName: callerName || 'WhatsApp Contact',
@@ -45,10 +46,12 @@ const AppNavigator = () => {
       }
     });
 
-    // Handle user tapping on a notification
-    const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
-      const { chatId, isCall, callType, callerName, chatName } = response.notification.request.content.data;
-      if (isCall && chatId) {
+    // Handle user tapping on a notification while app is in background
+    const unsubscribeOnNotificationOpenedApp = messaging().onNotificationOpenedApp(remoteMessage => {
+      const data = remoteMessage.data || {};
+      const { chatId, isCall, callType, callerName, chatName } = data;
+
+      if (isCall === 'true' && chatId) {
         navigationRef.current?.navigate('IncomingCall', {
           channelId: chatId,
           callType: callType || 'video',
@@ -82,8 +85,8 @@ const AppNavigator = () => {
       }, (err) => console.log('Call listener error:', err));
 
     return () => {
-      Notifications.removeNotificationSubscription(notificationListener);
-      Notifications.removeNotificationSubscription(responseListener);
+      unsubscribeOnMessage();
+      unsubscribeOnNotificationOpenedApp();
       unsubscribeCalls();
     };
   }, [user]);
