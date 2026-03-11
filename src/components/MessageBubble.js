@@ -5,8 +5,21 @@ import Colors from '../constants/Colors';
 const MessageBubble = ({ message, isMine }) => {
   const formatTime = (timestamp) => {
     if (!timestamp) return '';
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    try {
+      // Handle Native Firestore Timestamp
+      if (timestamp && typeof timestamp.toDate === 'function') {
+        return timestamp.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      }
+
+      // Handle Date Objects or strings
+      const date = new Date(timestamp);
+      if (isNaN(date.getTime())) return '';
+
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch (e) {
+      console.log("Time formatting error:", e);
+      return '';
+    }
   };
 
   return (
@@ -69,6 +82,7 @@ const styles = StyleSheet.create({
   time: {
     fontSize: 11,
     color: '#8696a0',
+    marginTop: 4,
   },
   readStatus: {
     fontSize: 14,

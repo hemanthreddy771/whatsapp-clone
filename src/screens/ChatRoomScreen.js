@@ -29,9 +29,9 @@ const ChatRoomScreen = ({ route }) => {
   const typingTimeoutRef = useRef(null);
 
   useEffect(() => {
-    if (!chatId || !user) return;
+    if (!chatId || !user?.uid) return;
 
-    // Use Native SDK syntax for real-time messages
+    // Use ONLY Native SDK methods
     const unsubscribe = db.collection('chats')
       .doc(chatId)
       .collection('messages')
@@ -46,13 +46,15 @@ const ChatRoomScreen = ({ route }) => {
         }
       }, (err) => console.log("Message fetch error:", err));
 
-    // Listen for other user's typing status safely
+    // Listen for other user's typing status safely using Native SDK
     const unsubscribeTyping = db.collection('chats').doc(chatId).onSnapshot((docSnap) => {
       if (docSnap && docSnap.exists && user?.uid) {
         const data = docSnap.data();
-        const receiverId = (chatId || '').replace(user.uid, '').replace('_', '');
-        if (receiverId) {
-          setIsOtherTyping(data[`typing_${receiverId}`] || false);
+        if (data) {
+          const receiverId = chatId.replace(user.uid, '').replace('_', '');
+          if (receiverId) {
+            setIsOtherTyping(data[`typing_${receiverId}`] || false);
+          }
         }
       }
     }, (err) => console.log("Typing fetch error:", err));
@@ -102,7 +104,7 @@ const ChatRoomScreen = ({ route }) => {
       await db.collection('chats').doc(chatId).collection('messages').add(messageData);
 
       // Update chat metadata for list view
-      const receiverId = (chatId || '').replace(user.uid, '').replace('_', '');
+      const receiverId = chatId.replace(user.uid, '').replace('_', '');
       const participants = [user.uid, receiverId];
 
       await db.collection('chats').doc(chatId).set({
@@ -156,6 +158,7 @@ const ChatRoomScreen = ({ route }) => {
         )}
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
+        removeClippedSubviews={false}
       />
 
       {isOtherTyping && (
