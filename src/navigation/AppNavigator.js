@@ -62,9 +62,29 @@ const AppNavigator = () => {
       }
     });
 
+    // Real-time Firestore listener for incoming calls (perfect for foreground state)
+    const unsubscribeCalls = db.collection('calls')
+      .where('receiverId', '==', user.uid)
+      .where('status', '==', 'outgoing')
+      .onSnapshot((snapshot) => {
+        if (!snapshot || snapshot.empty) return;
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === 'added') {
+            const callData = change.doc.data();
+            navigationRef.current?.navigate('IncomingCall', {
+              channelId: callData.participants.sort().join('_'),
+              callType: callData.type || 'video',
+              callerName: callData.callerName || 'Unknown',
+              callDocId: change.doc.id
+            });
+          }
+        });
+      }, (err) => console.log('Call listener error:', err));
+
     return () => {
       Notifications.removeNotificationSubscription(notificationListener);
       Notifications.removeNotificationSubscription(responseListener);
+      unsubscribeCalls();
     };
   }, [user]);
 
@@ -105,11 +125,6 @@ const AppNavigator = () => {
                     <TouchableOpacity
                       style={{ marginRight: 20 }}
                       onPress={async () => {
-                        navigation.navigate('VideoCalling', {
-                          channelId: route.params.chatId,
-                          callType: 'video'
-                        });
-
                         // Notify the other user about the call
                         const currentUser = user;
                         if (!currentUser) return;
@@ -121,7 +136,7 @@ const AppNavigator = () => {
                         const receiverData = receiverDoc.exists ? receiverDoc.data() : { displayName: 'Unknown' };
 
                         // Log the call in history
-                        await db.collection('calls').add({
+                        const callRef = await db.collection('calls').add({
                           callerId: currentUser.uid,
                           callerName: userData?.displayName || 'Unknown',
                           receiverId: receiverId,
@@ -132,13 +147,19 @@ const AppNavigator = () => {
                           createdAt: firestore.FieldValue.serverTimestamp(),
                         });
 
+                        navigation.navigate('VideoCalling', {
+                          channelId: route.params.chatId,
+                          callType: 'video',
+                          callDocId: callRef.id
+                        });
+
                         if (receiverDoc.exists && receiverDoc.data().pushToken) {
-                          await sendPushNotification(
+                          sendPushNotification(
                             receiverDoc.data().pushToken,
                             '📹 Incoming Video Call',
                             `${userData?.displayName} is calling you...`,
                             { chatId: route.params.chatId, isCall: true, callType: 'video', callerName: userData?.displayName }
-                          );
+                          ).catch(() => { });
                         }
                       }}
                     >
@@ -148,12 +169,6 @@ const AppNavigator = () => {
                     <TouchableOpacity
                       style={{ marginRight: 15 }}
                       onPress={async () => {
-                        navigation.navigate('VideoCalling', {
-                          channelId: route.params.chatId,
-                          callType: 'audio'
-                        });
-
-                        // Notify the other user about the call
                         const currentUser = user;
                         if (!currentUser) return;
 
@@ -164,7 +179,7 @@ const AppNavigator = () => {
                         const receiverData = receiverDoc.exists ? receiverDoc.data() : { displayName: 'Unknown' };
 
                         // Log the call in history
-                        await db.collection('calls').add({
+                        const callRef = await db.collection('calls').add({
                           callerId: currentUser.uid,
                           callerName: userData?.displayName || 'Unknown',
                           receiverId: receiverId,
@@ -175,13 +190,19 @@ const AppNavigator = () => {
                           createdAt: firestore.FieldValue.serverTimestamp(),
                         });
 
+                        navigation.navigate('VideoCalling', {
+                          channelId: route.params.chatId,
+                          callType: 'audio',
+                          callDocId: callRef.id
+                        });
+
                         if (receiverDoc.exists && receiverDoc.data().pushToken) {
-                          await sendPushNotification(
+                          sendPushNotification(
                             receiverDoc.data().pushToken,
                             '📞 Incoming Audio Call',
                             `${userData?.displayName} is calling you...`,
                             { chatId: route.params.chatId, isCall: true, callType: 'audio', callerName: userData?.displayName }
-                          );
+                          ).catch(() => { });
                         }
                       }}
                     >

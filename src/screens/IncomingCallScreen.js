@@ -1,23 +1,31 @@
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { nativeDb as db } from '../config/firebase';
 import Colors from '../constants/Colors';
 
 const IncomingCallScreen = ({ route, navigation }) => {
-    const { channelId, chatId, callerName, callType } = route.params || {};
+    const { channelId, chatId, callerName, callType, callDocId } = route.params || {};
     const callChannelId = channelId || chatId; // Support both param names
 
     // You would typically play a ringtone here
     // useEffect(() => { ... }, []);
 
-    const handleAccept = () => {
+    const handleAccept = async () => {
+        if (callDocId) {
+            await db.collection('calls').doc(callDocId).update({ status: 'ongoing' }).catch(() => { });
+        }
         navigation.replace('VideoCalling', {
             channelId: callChannelId,
-            callType: callType || 'video'
+            callType: callType || 'video',
+            callDocId: callDocId
         });
     };
 
-    const handleDecline = () => {
+    const handleDecline = async () => {
+        if (callDocId) {
+            await db.collection('calls').doc(callDocId).update({ status: 'rejected' }).catch(() => { });
+        }
         navigation.goBack();
     };
 

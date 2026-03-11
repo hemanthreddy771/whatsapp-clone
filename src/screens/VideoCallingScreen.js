@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, PermissionsAndroid, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, PermissionsAndroid, Platform, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { nativeDb as db } from '../config/firebase';
 import {
   createAgoraRtcEngine,
   ChannelProfileType,
@@ -11,7 +12,7 @@ import {
 const appId = 'b85e3bfa8da140f3bb8c1a20687f9a7b'; // Replace with your Agora App ID
 
 const VideoCallingScreen = ({ navigation, route }) => {
-  const { channelId, callType = 'video' } = route.params || {};
+  const { channelId, callType = 'video', callDocId } = route.params || {};
   const agoraEngine = useRef();
   const [isJoined, setIsJoined] = useState(false);
   const [remoteUid, setRemoteUid] = useState(0);
@@ -21,7 +22,27 @@ const VideoCallingScreen = ({ navigation, route }) => {
 
   useEffect(() => {
     setupVideoSDKEngine();
+
+    let unsubscribe = () => { };
+    if (callDocId) {
+      unsubscribe = db.collection('calls').doc(callDocId).onSnapshot((doc) => {
+        if (doc && doc.exists) {
+          const status = doc.data().status;
+          if (status === 'rejected') {
+            Alert.alert('Call Declined', 'The person you called declined the call.');
+            navigation.goBack();
+          } else if (status === 'ended') {
+            navigation.goBack();
+          }
+        }
+      });
+    }
+
     return () => {
+      unsubscribe();
+      if (callDocId) {
+        db.collection('calls').doc(callDocId).update({ status: 'ended' }).catch(() => { });
+      }
       agoraEngine.current?.leaveChannel();
       agoraEngine.current?.release();
     };
