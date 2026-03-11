@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system';
+import { Video } from 'expo-av';
 import MessageBubble from '../components/MessageBubble';
 import { nativeDb as db, storage } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
@@ -104,7 +105,7 @@ const ChatRoomScreen = ({ route, navigation }) => {
     if (user?.uid && chatId) {
       db.collection('chats').doc(chatId).set({
         [`unreadCount_${user.uid}`]: 0
-      }, { merge: true }).catch(() => {});
+      }, { merge: true }).catch(() => { });
     }
 
     return () => {
@@ -119,14 +120,14 @@ const ChatRoomScreen = ({ route, navigation }) => {
 
     db.collection('chats').doc(chatId).set({
       [`typing_${user.uid}`]: true
-    }, { merge: true }).catch(() => {});
+    }, { merge: true }).catch(() => { });
 
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
       if (user?.uid && chatId) {
         db.collection('chats').doc(chatId).set({
           [`typing_${user.uid}`]: false
-        }, { merge: true }).catch(() => {});
+        }, { merge: true }).catch(() => { });
       }
     }, 2000);
   };
@@ -137,8 +138,8 @@ const ChatRoomScreen = ({ route, navigation }) => {
       'Are you sure you want to delete this message?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
+        {
+          text: 'Delete',
           style: 'destructive',
           onPress: () => {
             db.collection('chats').doc(chatId).collection('messages').doc(message.id)
@@ -175,10 +176,10 @@ const ChatRoomScreen = ({ route, navigation }) => {
       const downloadURL = await reference.getDownloadURL();
       sendMessage(null, downloadURL, type);
     } catch (error) {
-       console.error("Upload error:", error);
-       Alert.alert('Upload Error', 'Failed to send media.');
+      console.error("Upload error:", error);
+      Alert.alert('Upload Error', 'Failed to send media.');
     } finally {
-       setIsUploading(false);
+      setIsUploading(false);
     }
   };
 
@@ -257,7 +258,7 @@ const ChatRoomScreen = ({ route, navigation }) => {
       <MessageBubble
         message={item}
         isMine={item.senderId === user?.uid}
-        onMediaPress={(url) => setSelectedMedia(url)}
+        onMediaPress={(url, type) => setSelectedMedia({ url, type })}
         onDownload={(url) => downloadMedia(url)}
       />
     </TouchableOpacity>
@@ -295,8 +296,8 @@ const ChatRoomScreen = ({ route, navigation }) => {
 
       {isUploading && (
         <View style={styles.uploadingBar}>
-            <ActivityIndicator size="small" color={Colors.secondary} />
-            <Text style={styles.uploadingText}>Sending media...</Text>
+          <ActivityIndicator size="small" color={Colors.secondary} />
+          <Text style={styles.uploadingText}>Sending media...</Text>
         </View>
       )}
 
@@ -335,12 +336,21 @@ const ChatRoomScreen = ({ route, navigation }) => {
           <TouchableOpacity style={styles.modalClose} onPress={() => setSelectedMedia(null)}>
             <Ionicons name="close" size={30} color="#fff" />
           </TouchableOpacity>
-          {selectedMedia && (
-            <Image source={{ uri: selectedMedia }} style={styles.fullImage} resizeMode="contain" />
+          {selectedMedia && selectedMedia.type === 'video' ? (
+            <Video
+              style={styles.fullVideo}
+              source={{ uri: selectedMedia.url }}
+              useNativeControls
+              resizeMode="contain"
+              isLooping
+              shouldPlay
+            />
+          ) : (
+            selectedMedia && <Image source={{ uri: selectedMedia.url }} style={styles.fullImage} resizeMode="contain" />
           )}
-          <TouchableOpacity style={styles.downloadBtn} onPress={() => { downloadMedia(selectedMedia); }}>
+          <TouchableOpacity style={styles.downloadBtn} onPress={() => { downloadMedia(selectedMedia.url); }}>
             <Ionicons name="download-outline" size={24} color="#fff" />
-            <Text style={{color:'#fff', marginLeft: 8}}>Save to Gallery</Text>
+            <Text style={{ color: '#fff', marginLeft: 8 }}>Save to Gallery</Text>
           </TouchableOpacity>
         </View>
       </Modal>
@@ -385,6 +395,9 @@ const styles = StyleSheet.create({
     position: 'absolute', top: 50, right: 20, zIndex: 10, padding: 10,
   },
   fullImage: {
+    width: SCREEN_WIDTH, height: SCREEN_HEIGHT * 0.7,
+  },
+  fullVideo: {
     width: SCREEN_WIDTH, height: SCREEN_HEIGHT * 0.7,
   },
   downloadBtn: {
