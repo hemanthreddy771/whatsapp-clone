@@ -7,7 +7,7 @@ import { nativeDb as db } from '../config/firebase';
 // import { doc, updateDoc } from 'firebase/firestore';
 import * as LocalAuthentication from 'expo-local-authentication';
 
-const SettingsScreen = () => {
+const SettingsScreen = ({ navigation }) => {
   const { userData, setUserData } = useAuth();
   const [isBiometricSupported, setIsBiometricSupported] = React.useState(false);
 
@@ -73,7 +73,11 @@ const SettingsScreen = () => {
     <View style={styles.container}>
 
       {/* Profile Section */}
-      <View style={styles.profileSection}>
+      <TouchableOpacity
+        style={styles.profileSection}
+        onPress={() => navigation.navigate('ProfileEdit')}
+        activeOpacity={0.7}
+      >
         <Image
           source={{ uri: userData?.photoURL || 'https://i.pravatar.cc/150' }}
           style={styles.avatar}
@@ -82,7 +86,8 @@ const SettingsScreen = () => {
           <Text style={styles.name}>{userData?.displayName || 'User'}</Text>
           <Text style={styles.status}>Available</Text>
         </View>
-      </View>
+        <Ionicons name="chevron-forward" size={20} color="#ccc" />
+      </TouchableOpacity>
 
       {/* Settings Options */}
       <View style={styles.optionsContainer}>

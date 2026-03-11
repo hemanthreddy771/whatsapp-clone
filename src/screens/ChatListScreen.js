@@ -31,15 +31,10 @@ const ChatListScreen = ({ navigation }) => {
 
     console.log("Setting up chat listener for:", user.uid);
 
-    // We remove the .orderBy() from the server query.
-    // Firestore filters out documents where the ordered field is null.
-    // When sending a message, lastMessageTime is briefly null (serverTimestamp), 
-    // which can cause the chat to disappear or fail to update in the list.
     const unsubscribe = db.collection('chats')
       .where('participants', 'array-contains', user.uid)
       .onSnapshot((snapshot) => {
         if (snapshot) {
-          console.log("Got chat snapshot, size:", snapshot.size);
           let fetchedChats = snapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data(),
@@ -61,7 +56,7 @@ const ChatListScreen = ({ navigation }) => {
       });
 
     return () => unsubscribe();
-  }, [user?.uid, isFocused]); // Re-subscribe or catch up when screen is focused
+  }, [user?.uid, isFocused]);
 
   const onInvite = async () => {
     try {
@@ -96,7 +91,6 @@ const ChatListScreen = ({ navigation }) => {
           Alert.alert('Note', 'This is your own number!');
         } else {
           const chatId = [auth().currentUser.uid, foundUser.uid].sort().join('_');
-
           navigation.navigate('ChatRoom', {
             chatId: chatId,
             chatName: foundUser.displayName
@@ -111,8 +105,25 @@ const ChatListScreen = ({ navigation }) => {
     }
   };
 
+  const handleLongPressChat = (chatId) => {
+    Alert.alert(
+      'Delete Chat',
+      'Do you want to delete this conversation?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            db.collection('chats').doc(chatId).delete()
+              .catch(err => Alert.alert('Error', 'Failed to delete chat'));
+          }
+        }
+      ]
+    );
+  };
+
   const renderChatItem = ({ item }) => {
-    // Robust time formatting
     let timeString = '';
     if (item.lastMessageTime) {
       const date = item.lastMessageTime.toDate ? item.lastMessageTime.toDate() : new Date(item.lastMessageTime);
@@ -121,6 +132,7 @@ const ChatListScreen = ({ navigation }) => {
 
     const otherParticipantId = (item.participants || []).find(id => id !== user?.uid);
     const displayName = item[`name_${otherParticipantId}`] || item.chatName || 'Unknown';
+    const unreadCount = item[`unreadCount_${user.uid}`] || 0;
 
     return (
       <TouchableOpacity
@@ -129,21 +141,35 @@ const ChatListScreen = ({ navigation }) => {
           chatId: item.id,
           chatName: displayName
         })}
+        onLongPress={() => handleLongPressChat(item.id)}
       >
         <View style={styles.avatarContainer}>
           <View style={styles.avatarPlaceholder}>
-            <Ionicons name="person" size={30} color="#fff" />
+            {item[`photo_${otherParticipantId}`] ? (
+              <Image source={{ uri: item[`photo_${otherParticipantId}`] }} style={styles.avatarImage} />
+            ) : (
+              <Ionicons name="person" size={30} color="#fff" />
+            )}
           </View>
         </View>
 
         <View style={styles.chatInfo}>
           <View style={styles.chatHeader}>
             <Text style={styles.chatName}>{displayName}</Text>
-            <Text style={styles.chatTime}>{timeString}</Text>
+            <Text style={[styles.chatTime, unreadCount > 0 && { color: Colors.secondary, fontWeight: 'bold' }]}>
+              {timeString}
+            </Text>
           </View>
-          <Text style={styles.lastMessage} numberOfLines={1}>
-            {item.lastMessage || 'No messages yet...'}
-          </Text>
+          <View style={styles.chatBody}>
+            <Text style={[styles.lastMessage, unreadCount > 0 && { color: '#000', fontWeight: '500' }]} numberOfLines={1}>
+              {item.lastMessage || 'No messages yet...'}
+            </Text>
+            {unreadCount > 0 && (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadCountText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+              </View>
+            )}
+          </View>
         </View>
       </TouchableOpacity>
     );
@@ -180,7 +206,7 @@ const ChatListScreen = ({ navigation }) => {
         data={chats}
         keyExtractor={(item) => item.id}
         renderItem={renderChatItem}
-        extraData={isFocused} // Force re-render on focus
+        extraData={isFocused}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <View style={styles.iconCircle}>
@@ -252,6 +278,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#ccc',
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden'
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%'
   },
   chatInfo: {
     flex: 1,
@@ -263,6 +294,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 4,
+  },
+  chatBody: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center'
   },
   chatName: {
     fontSize: 17,
@@ -276,6 +312,22 @@ const styles = StyleSheet.create({
   lastMessage: {
     fontSize: 14,
     color: '#666',
+    flex: 1
+  },
+  unreadBadge: {
+    backgroundColor: Colors.secondary,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    marginLeft: 5
+  },
+  unreadCountText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold'
   },
   centered: {
     flex: 1,

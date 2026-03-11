@@ -8,11 +8,14 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
-  ImageBackground
+  ImageBackground,
+  Alert,
+  ActivityIndicator
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import MessageBubble from '../components/MessageBubble';
-import { nativeDb as db } from '../config/firebase';
+import { nativeDb as db, storage } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { sendPushNotification } from '../utils/notifications';
 import firestore from '@react-native-firebase/firestore';
@@ -23,10 +26,12 @@ const ChatRoomScreen = ({ route }) => {
   const { chatId, chatName } = route.params || { chatId: 'general_room', chatName: 'Chat' };
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
   const { user, userData } = useAuth();
 
   const [isOtherTyping, setIsOtherTyping] = useState(false);
   const typingTimeoutRef = useRef(null);
+  const flatListRef = useRef(null);
 
   useEffect(() => {
     if (!chatId || !user?.uid) return;
@@ -59,6 +64,13 @@ const ChatRoomScreen = ({ route }) => {
       }
     }, (err) => console.log("Typing fetch error:", err));
 
+    // Clear unread count for current user when visiting
+    if (user?.uid && chatId) {
+      db.collection('chats').doc(chatId).set({
+        [`unreadCount_${user.uid}`]: 0
+      }, { merge: true }).catch(err => console.log("Clear unread error:", err));
+    }
+
     return () => {
       unsubscribe();
       unsubscribeTyping();
@@ -86,18 +98,78 @@ const ChatRoomScreen = ({ route }) => {
     }, 2000);
   };
 
-  const sendMessage = async () => {
-    if (inputText.trim() === '' || !user?.uid) return;
+  const handleLongPressMessage = (message) => {
+    Alert.alert(
+      'Delete Message',
+      'Are you sure you want to delete this message?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            db.collection('chats')
+              .doc(chatId)
+              .collection('messages')
+              .doc(message.id)
+              .delete()
+              .catch(err => Alert.alert('Error', 'Failed to delete message'));
+          }
+        }
+      ]
+    );
+  };
 
-    const text = inputText;
-    setInputText('');
+  const pickMedia = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow access to your gallery to send photos/videos.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      quality: 0.7,
+    });
+
+    if (!result.canceled) {
+      uploadMedia(result.assets[0].uri, result.assets[0].type);
+    }
+  };
+
+  const uploadMedia = async (uri, type) => {
+    setIsUploading(true);
+    try {
+      const filename = uri.substring(uri.lastIndexOf('/') + 1);
+      const reference = storage.ref(`chats/${chatId}/${filename}`);
+
+      // Use putFile for native reliability
+      await reference.putFile(uri);
+      const downloadURL = await reference.getDownloadURL();
+
+      sendMessage(null, downloadURL, type);
+    } catch (error) {
+      console.error("Upload error:", error);
+      Alert.alert('Upload Error', 'Failed to send media.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const sendMessage = async (customText = null, mediaUrl = null, mediaType = null) => {
+    const textToSend = customText !== null ? customText : inputText;
+    if ((!textToSend || textToSend.trim() === '') && !mediaUrl) return;
+
+    if (customText === null) setInputText('');
 
     try {
       const messageData = {
-        text: text,
+        text: textToSend,
         createdAt: firestore.FieldValue.serverTimestamp(),
         senderId: user.uid,
         senderName: userData?.displayName || 'Unknown',
+        mediaUrl: mediaUrl,
+        mediaType: mediaType,
       };
 
       // Add message via Native SDK
@@ -108,13 +180,13 @@ const ChatRoomScreen = ({ route }) => {
       const participants = [user.uid, receiverId];
 
       await db.collection('chats').doc(chatId).set({
-        lastMessage: text,
+        lastMessage: mediaUrl ? `📷 ${mediaType === 'video' ? 'Video' : 'Photo'}` : textToSend,
         lastMessageTime: firestore.FieldValue.serverTimestamp(),
         lastMessageSenderId: user.uid,
         participants: participants,
-        // Store individual names so each user sees the correct counterpart
         [`name_${user.uid}`]: userData?.displayName || 'Unknown',
         ...(chatName && chatName !== 'Chat' ? { [`name_${receiverId}`]: chatName } : {}),
+        [`unreadCount_${receiverId}`]: firestore.FieldValue.increment(1)
       }, { merge: true });
 
       // Handle push notifications
@@ -126,7 +198,7 @@ const ChatRoomScreen = ({ route }) => {
             await sendPushNotification(
               receiverData.pushToken,
               userData?.displayName || 'New Message',
-              text,
+              mediaUrl ? `📷 Sent a ${mediaType}` : textToSend,
               { chatId, chatName: userData?.displayName }
             );
           }
@@ -150,22 +222,33 @@ const ChatRoomScreen = ({ route }) => {
       />
 
       <FlatList
+        ref={flatListRef}
         data={messages}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <MessageBubble
-            message={item}
-            isMine={item.senderId === user?.uid}
-          />
+          <TouchableOpacity onLongPress={() => handleLongPressMessage(item)} activeOpacity={0.9}>
+            <MessageBubble
+              message={item}
+              isMine={item.senderId === user?.uid}
+            />
+          </TouchableOpacity>
         )}
+        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+        onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
-        removeClippedSubviews={false}
       />
 
       {isOtherTyping && (
         <View style={styles.typingIndicator}>
           <Text style={styles.typingText}>typing...</Text>
+        </View>
+      )}
+
+      {isUploading && (
+        <View style={styles.uploadingBar}>
+          <ActivityIndicator size="small" color={Colors.secondary} />
+          <Text style={styles.uploadingText}>Sending media...</Text>
         </View>
       )}
 
@@ -181,17 +264,18 @@ const ChatRoomScreen = ({ route }) => {
             onChangeText={handleTextChange}
             multiline
           />
-          <TouchableOpacity style={styles.iconBtn}>
+          <TouchableOpacity style={styles.iconBtn} onPress={pickMedia} disabled={isUploading}>
             <Ionicons name="attach" size={24} color="#8696a0" style={{ transform: [{ rotate: '45deg' }] }} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.iconBtn}>
+          <TouchableOpacity style={styles.iconBtn} onPress={pickMedia} disabled={isUploading}>
             <Ionicons name="camera" size={24} color="#8696a0" />
           </TouchableOpacity>
         </View>
 
         <TouchableOpacity
           style={styles.sendButton}
-          onPress={sendMessage}
+          onPress={() => sendMessage()}
+          disabled={isUploading}
         >
           <Ionicons
             name={inputText.length > 0 ? "send" : "mic"}
@@ -267,6 +351,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontStyle: 'italic',
   },
+  uploadingBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 5,
+    backgroundColor: 'rgba(255,255,255,0.8)'
+  },
+  uploadingText: {
+    marginLeft: 10,
+    fontSize: 12,
+    color: '#666'
+  }
 });
 
 export default ChatRoomScreen;
