@@ -69,9 +69,24 @@ const VideoCallingScreen = ({ navigation, route }) => {
       }
 
       engine.registerEventHandler({
-        onJoinChannelSuccess: () => setIsJoined(true),
-        onUserJoined: (_connection, uid) => setRemoteUid(uid),
-        onUserOffline: () => setRemoteUid(0),
+        onError: (err, msg) => {
+          console.log('[Agora] Error:', err, msg);
+        },
+        onJoinChannelSuccess: (connection, elapsed) => {
+          console.log('[Agora] onJoinChannelSuccess:', connection, elapsed);
+          setIsJoined(true);
+        },
+        onUserJoined: (connection, uid, elapsed) => {
+          console.log('[Agora] onUserJoined:', uid);
+          setRemoteUid(uid);
+        },
+        onUserOffline: (connection, uid, reason) => {
+          console.log('[Agora] onUserOffline:', uid, reason);
+          setRemoteUid(0);
+        },
+        onConnectionStateChanged: (connection, state, reason) => {
+          console.log('[Agora] State changed:', state, reason);
+        }
       });
 
       engine.joinChannel('', channelId, 0, {
@@ -81,8 +96,10 @@ const VideoCallingScreen = ({ navigation, route }) => {
 
       // Set initial speaker state
       engine.setEnableSpeakerphone(isSpeakerOn);
+      console.log('[Agora] Attempting to join channel:', channelId);
     } catch (e) {
-      console.error(e);
+      console.error('[Agora SDK Error]', e);
+      Alert.alert('Call Error', 'Failed to initialize the calling engine. If your internet is fine, ensure your Agora App ID does not have an App Certificate enforced without a token.');
     }
   };
 

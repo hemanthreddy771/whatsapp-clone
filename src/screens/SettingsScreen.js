@@ -7,6 +7,7 @@ import { nativeDb as db } from '../config/firebase';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system';
 
 const SettingsScreen = ({ navigation }) => {
   const { userData, setUserData } = useAuth();
@@ -105,8 +106,17 @@ const SettingsScreen = ({ navigation }) => {
             quality: 0.8,
           });
           if (!result.canceled) {
-            await AsyncStorage.setItem('chat_wallpaper', result.assets[0].uri);
-            Alert.alert('Success', 'Chat wallpaper updated successfully!');
+            const tempUri = result.assets[0].uri;
+            const filename = tempUri.split('/').pop();
+            const permanentUri = FileSystem.documentDirectory + 'wallpaper_' + filename;
+            try {
+              await FileSystem.copyAsync({ from: tempUri, to: permanentUri });
+              await AsyncStorage.setItem('chat_wallpaper', permanentUri);
+              Alert.alert('Success', 'Chat wallpaper updated successfully!');
+            } catch (err) {
+              console.log("Failed to save wallpaper permanently", err);
+              Alert.alert('Error', 'Failed to save wallpaper.');
+            }
           }
         }} />
 

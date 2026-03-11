@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { TouchableOpacity, View, Text } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -8,6 +8,7 @@ import LoginScreen from '../screens/LoginScreen';
 import ProfileSetupScreen from '../screens/ProfileSetupScreen';
 import IncomingCallScreen from '../screens/IncomingCallScreen';
 import ProfileEditScreen from '../screens/ProfileEditScreen';
+import LockScreen from '../screens/LockScreen';
 import { useAuth } from '../context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import messaging from '@react-native-firebase/messaging';
@@ -23,6 +24,7 @@ const Stack = createNativeStackNavigator();
 const AppNavigator = () => {
   const { user, userData, loading } = useAuth();
   const navigationRef = useRef(null);
+  const [isUnlocked, setIsUnlocked] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -115,6 +117,10 @@ const AppNavigator = () => {
           <>
             <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} options={{ headerShown: false }} />
           </>
+        ) : userData.privacyLockEnabled && !isUnlocked ? (
+          <Stack.Screen name="Lock" options={{ headerShown: false }}>
+            {() => <LockScreen onUnlock={() => setIsUnlocked(true)} />}
+          </Stack.Screen>
         ) : (
           <>
             <Stack.Screen name="Main" component={TabNavigator} options={{ headerShown: false }} />
