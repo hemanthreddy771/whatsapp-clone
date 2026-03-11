@@ -18,6 +18,7 @@ import { AppState } from 'react-native';
 // import { doc, getDoc } from 'firebase/firestore';
 import { nativeDb as db } from '../config/firebase';
 import { sendPushNotification } from '../utils/notifications';
+import firestore from '@react-native-firebase/firestore';
 import LockScreen from '../screens/LockScreen';
 import Colors from '../constants/Colors';
 
@@ -141,6 +142,20 @@ const AppNavigator = () => {
                         if (!receiverId) return;
 
                         const receiverDoc = await db.collection('users').doc(receiverId).get();
+                        const receiverData = receiverDoc.exists ? receiverDoc.data() : { displayName: 'Unknown' };
+
+                        // Log the call in history
+                        await db.collection('calls').add({
+                          callerId: currentUser.uid,
+                          callerName: userData?.displayName || 'Unknown',
+                          receiverId: receiverId,
+                          receiverName: receiverData.displayName || 'Unknown',
+                          type: 'video',
+                          status: 'outgoing', // Initial status
+                          participants: [currentUser.uid, receiverId],
+                          createdAt: firestore.FieldValue.serverTimestamp(),
+                        });
+
                         if (receiverDoc.exists && receiverDoc.data().pushToken) {
                           await sendPushNotification(
                             receiverDoc.data().pushToken,
@@ -170,6 +185,20 @@ const AppNavigator = () => {
                         if (!receiverId) return;
 
                         const receiverDoc = await db.collection('users').doc(receiverId).get();
+                        const receiverData = receiverDoc.exists ? receiverDoc.data() : { displayName: 'Unknown' };
+
+                        // Log the call in history
+                        await db.collection('calls').add({
+                          callerId: currentUser.uid,
+                          callerName: userData?.displayName || 'Unknown',
+                          receiverId: receiverId,
+                          receiverName: receiverData.displayName || 'Unknown',
+                          type: 'audio',
+                          status: 'outgoing',
+                          participants: [currentUser.uid, receiverId],
+                          createdAt: firestore.FieldValue.serverTimestamp(),
+                        });
+
                         if (receiverDoc.exists && receiverDoc.data().pushToken) {
                           await sendPushNotification(
                             receiverDoc.data().pushToken,

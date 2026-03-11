@@ -4,6 +4,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import ChatListScreen from '../screens/ChatListScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import CallsScreen from '../screens/CallsScreen';
 import Colors from '../constants/Colors';
 
 const Tab = createBottomTabNavigator();
@@ -59,9 +60,7 @@ const TabNavigator = () => {
       <Tab.Screen name="Updates">
         {() => <Placeholder name="Status Updates" />}
       </Tab.Screen>
-      <Tab.Screen name="Calls">
-        {() => <Placeholder name="Call History" />}
-      </Tab.Screen>
+      <Tab.Screen name="Calls" component={CallsScreen} />
       <Tab.Screen name="Settings" component={SettingsScreen} />
     </Tab.Navigator>
   );
