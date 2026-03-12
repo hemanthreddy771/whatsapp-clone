@@ -7,8 +7,8 @@ import { RtcSurfaceView } from 'react-native-agora';
 
 const { width, height } = Dimensions.get('window');
 
-const OVERLAY_WIDTH = 140;
-const OVERLAY_HEIGHT = 190;
+const OVERLAY_WIDTH = 160;
+const OVERLAY_HEIGHT = 220;
 
 const CallOverlay = () => {
     const { activeCall, setActiveCall } = useAuth();
@@ -17,7 +17,9 @@ const CallOverlay = () => {
 
     if (!activeCall || !activeCall.isMinimized) return null;
 
-    const pan = React.useRef(new Animated.ValueXY({ x: width - OVERLAY_WIDTH - 20, y: height - OVERLAY_HEIGHT - 100 })).current;
+    // Initial position using a ref to track current value without re-renders
+    const pos = React.useRef({ x: width - OVERLAY_WIDTH - 20, y: height - OVERLAY_HEIGHT - 100 });
+    const pan = React.useRef(new Animated.ValueXY(pos.current)).current;
 
     const panResponder = React.useRef(
         PanResponder.create({
@@ -37,15 +39,15 @@ const CallOverlay = () => {
                 let targetX = pan.x._value;
                 let targetY = pan.y._value;
 
-                // Snap to horizontal edges
+                // Edge snapping logic
                 if (targetX < width / 2 - OVERLAY_WIDTH / 2) {
-                    targetX = 10;
+                    targetX = 15;
                 } else {
-                    targetX = width - OVERLAY_WIDTH - 10;
+                    targetX = width - OVERLAY_WIDTH - 15;
                 }
 
-                // Vertical boundaries
-                if (targetY < 50) targetY = 50;
+                // Vertical boundary checks
+                if (targetY < 60) targetY = 60;
                 if (targetY > height - OVERLAY_HEIGHT - 120) targetY = height - OVERLAY_HEIGHT - 120;
 
                 Animated.spring(pan, {
@@ -91,7 +93,7 @@ const CallOverlay = () => {
                                 <RtcSurfaceView canvas={{ uid: activeCall.remoteUid }} style={styles.miniVideo} />
                             ) : (
                                 <View style={styles.miniPlaceholder}>
-                                    <Ionicons name="person" size={40} color="#fff" />
+                                    <Ionicons name="person" size={50} color="#fff" />
                                 </View>
                             )}
                         </View>
@@ -103,15 +105,15 @@ const CallOverlay = () => {
                     </View>
                 ) : (
                     <View style={styles.miniPlaceholder}>
-                        <Ionicons name="call" size={24} color="#fff" />
-                        <View style={{ marginLeft: 10 }}>
+                        <Ionicons name="call" size={26} color="#fff" />
+                        <View style={{ marginLeft: 12 }}>
                             <Text style={styles.miniText} numberOfLines={1}>{activeCall.callerName || 'In Call'}</Text>
-                            <Text style={{ color: '#aaa', fontSize: 10 }}>Minimized</Text>
+                            <Text style={{ color: '#ccc', fontSize: 10 }}>Minimized</Text>
                         </View>
                     </View>
                 )}
                 <View style={styles.expandInfo}>
-                    <Text style={{ color: '#fff', fontSize: 8, fontWeight: 'bold' }}>2X TAP TO OPEN</Text>
+                    <Text style={{ color: '#fff', fontSize: 9, fontWeight: 'bold' }}>2X TAP TO OPEN</Text>
                 </View>
             </TouchableOpacity>
         </Animated.View>
@@ -124,7 +126,7 @@ const styles = StyleSheet.create({
         width: OVERLAY_WIDTH,
         height: OVERLAY_HEIGHT,
         backgroundColor: '#1c1c1c',
-        borderRadius: 12,
+        borderRadius: 15,
         elevation: 10,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
@@ -132,12 +134,12 @@ const styles = StyleSheet.create({
         shadowRadius: 6,
         overflow: 'hidden',
         zIndex: 9999,
-        borderWidth: 1.5,
-        borderColor: 'rgba(255,255,255,0.1)',
+        borderWidth: 2,
+        borderColor: 'rgba(255,255,255,0.2)',
     },
     audioOverlay: {
-        height: 60,
-        width: 180,
+        height: 70,
+        width: 200,
         backgroundColor: '#075E54',
     },
     content: {
@@ -152,13 +154,13 @@ const styles = StyleSheet.create({
     },
     localCorner: {
         position: 'absolute',
-        bottom: 10,
-        right: 10,
-        width: 45,
-        height: 65,
-        borderRadius: 4,
+        bottom: 12,
+        right: 12,
+        width: 50,
+        height: 75,
+        borderRadius: 6,
         overflow: 'hidden',
-        borderWidth: 1.5,
+        borderWidth: 2,
         borderColor: '#fff',
         backgroundColor: '#000',
     },
@@ -174,16 +176,16 @@ const styles = StyleSheet.create({
     },
     miniText: {
         color: '#fff',
-        fontSize: 14,
+        fontSize: 16,
         fontWeight: 'bold',
     },
     expandInfo: {
         position: 'absolute',
-        bottom: 5,
+        bottom: 0,
         left: 0,
         right: 0,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        paddingVertical: 2,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        paddingVertical: 3,
         alignItems: 'center',
     }
 });
