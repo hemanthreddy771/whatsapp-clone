@@ -59,6 +59,9 @@ const VideoCallingScreen = ({ navigation, route }) => {
   // Update global state whenever local state changes
   useEffect(() => {
     if (isJoined) {
+      // If the call is ALREADY minimized, don't overwrite it to false
+      const currentlyMinimized = activeCall?.isMinimized || false;
+
       setActiveCall({
         channelId,
         callType,
@@ -69,10 +72,10 @@ const VideoCallingScreen = ({ navigation, route }) => {
         isMuted,
         isVideoOff,
         isSpeakerOn,
-        isMinimized: false
+        isMinimized: currentlyMinimized
       });
     }
-  }, [isJoined, remoteUid, isMuted, isVideoOff, isSpeakerOn]);
+  }, [isJoined, remoteUid, isMuted, isVideoOff, isSpeakerOn, activeCall?.isMinimized]);
 
   const setupVideoSDKEngine = async () => {
     try {

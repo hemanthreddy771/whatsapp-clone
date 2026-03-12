@@ -15,20 +15,23 @@ const CallOverlay = () => {
     const navigation = useNavigation();
     const lastTap = React.useRef(0);
 
-    if (!activeCall || !activeCall.isMinimized) return null;
-
     // Initial position using a ref to track current value without re-renders
-    const pos = React.useRef({ x: width - OVERLAY_WIDTH - 20, y: height - OVERLAY_HEIGHT - 100 });
-    const pan = React.useRef(new Animated.ValueXY(pos.current)).current;
+    const pan = React.useRef(new Animated.ValueXY({
+        x: width - OVERLAY_WIDTH - 20,
+        y: height - OVERLAY_HEIGHT - 120
+    })).current;
+
+    if (!activeCall || !activeCall.isMinimized) return null;
 
     const panResponder = React.useRef(
         PanResponder.create({
             onStartShouldSetPanResponder: () => true,
             onMoveShouldSetPanResponder: () => true,
             onPanResponderGrant: () => {
+                // Safely set offset
                 pan.setOffset({
-                    x: pan.x._value,
-                    y: pan.y._value
+                    x: pan.x._value || 0,
+                    y: pan.y._value || 0
                 });
                 pan.setValue({ x: 0, y: 0 });
             },
@@ -48,13 +51,13 @@ const CallOverlay = () => {
 
                 // Vertical boundary checks
                 if (targetY < 60) targetY = 60;
-                if (targetY > height - OVERLAY_HEIGHT - 120) targetY = height - OVERLAY_HEIGHT - 120;
+                if (targetY > height - OVERLAY_HEIGHT - 130) targetY = height - OVERLAY_HEIGHT - 130;
 
                 Animated.spring(pan, {
                     toValue: { x: targetX, y: targetY },
                     useNativeDriver: false,
-                    damping: 20,
-                    stiffness: 150
+                    damping: 25, // Smoother damping
+                    stiffness: 120
                 }).start();
             },
         })
