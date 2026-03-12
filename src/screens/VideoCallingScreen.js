@@ -22,6 +22,7 @@ const VideoCallingScreen = ({ navigation, route }) => {
   const [isVideoOff, setIsVideoOff] = useState(activeCall?.isVideoOff ?? (callType === 'audio'));
   const [isSpeakerOn, setIsSpeakerOn] = useState(activeCall?.isSpeakerOn ?? (callType === 'video'));
   const [isSwapped, setIsSwapped] = useState(false);
+  const [isMinimizing, setIsMinimizing] = useState(false);
 
   useEffect(() => {
     // Persistent engine setup
@@ -143,10 +144,10 @@ const VideoCallingScreen = ({ navigation, route }) => {
   };
 
   const handleMinimize = () => {
-    // Safety check: Don't do anything if we don't have enough data
-    if (!channelId) return;
+    // 1. Immediately hide local videos
+    setIsMinimizing(true);
 
-    // Set state safely using a functional update
+    // 2. Update global state for PiP
     setActiveCall(prev => ({
       ...prev,
       channelId,
@@ -161,9 +162,10 @@ const VideoCallingScreen = ({ navigation, route }) => {
       isMinimized: true
     }));
 
-    // Use replace or navigate to ensure the current screen is unmounted properly
-    navigation.popToTop();
-    navigation.navigate('Main');
+    // 3. Defer navigation slightly for smoother state propagation
+    setTimeout(() => {
+      navigation.navigate('Main');
+    }, 50);
   };
 
   const toggleMute = () => {
@@ -193,7 +195,7 @@ const VideoCallingScreen = ({ navigation, route }) => {
   return (
     <View style={styles.container}>
       {/* Main Video Area */}
-      {callType === 'video' && isJoined && !activeCall?.isMinimized ? (
+      {callType === 'video' && isJoined && !activeCall?.isMinimized && !isMinimizing ? (
         isSwapped ? (
           !isVideoOff ? (
             <RtcSurfaceView canvas={{ uid: 0 }} style={styles.remoteVideo} />
@@ -219,7 +221,7 @@ const VideoCallingScreen = ({ navigation, route }) => {
             </View>
           )
         )
-      ) : !activeCall?.isMinimized ? (
+      ) : !activeCall?.isMinimized && !isMinimizing ? (
         <View style={styles.videoPlaceholder}>
           <View style={styles.avatarContainer}>
             <Ionicons name="person" size={80} color="#fff" />
@@ -234,7 +236,7 @@ const VideoCallingScreen = ({ navigation, route }) => {
       ) : <View style={{ flex: 1, backgroundColor: '#000' }} />}
 
       {/* Picture-in-Picture Video (Self Preview) */}
-      {callType === 'video' && isJoined && !activeCall?.isMinimized && (
+      {callType === 'video' && isJoined && !activeCall?.isMinimized && !isMinimizing && (
         <TouchableOpacity
           style={styles.localVideo}
           activeOpacity={0.8}
@@ -257,7 +259,7 @@ const VideoCallingScreen = ({ navigation, route }) => {
       )}
 
       {/* Header Controls (Minimize) */}
-      {!activeCall?.isMinimized && (
+      {!activeCall?.isMinimized && !isMinimizing && (
         <TouchableOpacity style={styles.minimizeBtn} onPress={handleMinimize}>
           <Ionicons name="chevron-down" size={30} color="#fff" />
         </TouchableOpacity>
