@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
+import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
 import auth from '@react-native-firebase/auth';
 import { nativeDb as db } from '../config/firebase';
 
