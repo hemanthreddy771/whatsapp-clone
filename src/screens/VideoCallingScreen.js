@@ -10,12 +10,11 @@ import {
 import { nativeDb as db } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 
-const appId = 'd7b226d604b649de85589eb7c5fd0ad1'; // Correct Agora App ID
+const appId = 'd7b226d604b649de85589eb7c5fd0ad1';
 
 const VideoCallingScreen = ({ navigation, route }) => {
   const { channelId, callType = 'video', callDocId, callerName } = route.params || {};
-  const { activeCall, setActiveCall } = useAuth();
-  const agoraEngine = useRef();
+  const { activeCall, setActiveCall, engineRef } = useAuth();
 
   const [isJoined, setIsJoined] = useState(activeCall?.isJoined || false);
   const [remoteUid, setRemoteUid] = useState(activeCall?.remoteUid || 0);
@@ -25,13 +24,13 @@ const VideoCallingScreen = ({ navigation, route }) => {
   const [isSwapped, setIsSwapped] = useState(false);
 
   useEffect(() => {
-    // If there's an existing active call and it's this one, we don't re-init
-    if (activeCall && activeCall.callDocId === callDocId && activeCall.isJoined) {
-      console.log("[VideoCall] Reusing existing engine");
-      // Grab the engine reference if we need to, but usually it's better to re-init if unsure
+    // Persistent engine setup
+    if (!engineRef.current) {
       setupVideoSDKEngine();
     } else {
-      setupVideoSDKEngine();
+      console.log("[VideoCall] Reusing global engine");
+      // If we are reusing, we might need to re-register events if they were cleared
+      registerEngineEvents();
     }
 
     let unsubscribe = () => { };
@@ -51,16 +50,14 @@ const VideoCallingScreen = ({ navigation, route }) => {
 
     return () => {
       unsubscribe();
-      // We DON'T end the call here. The user must press "End" or it stays in background.
+      // IMPORTANT: No engine release or leaveChannel here.
+      // That only happens in handleEndCall.
     };
   }, []);
 
-  // Update global state whenever local state changes
   useEffect(() => {
     if (isJoined) {
-      // Respect the existsing minimized state if it's already true
       const currentlyMinimized = activeCall?.isMinimized || false;
-
       setActiveCall({
         channelId,
         callType,
@@ -76,6 +73,30 @@ const VideoCallingScreen = ({ navigation, route }) => {
     }
   }, [isJoined, remoteUid, isMuted, isVideoOff, isSpeakerOn, activeCall?.isMinimized]);
 
+  const registerEngineEvents = () => {
+    const engine = engineRef.current;
+    if (!engine) return;
+
+    engine.registerEventHandler({
+      onError: (err, msg) => {
+        console.log('[Agora] Error:', err, msg);
+      },
+      onJoinChannelSuccess: (connection, elapsed) => {
+        console.log('[Agora] onJoinChannelSuccess:', connection, elapsed);
+        setIsJoined(true);
+      },
+      onUserJoined: (connection, uid, elapsed) => {
+        console.log('[Agora] onUserJoined:', uid);
+        setRemoteUid(uid);
+      },
+      onUserOffline: (connection, uid, reason) => {
+        console.log('[Agora] onUserOffline:', uid, reason);
+        setRemoteUid(0);
+        handleEndCall(false);
+      },
+    });
+  };
+
   const setupVideoSDKEngine = async () => {
     try {
       if (Platform.OS === 'android') {
@@ -85,35 +106,17 @@ const VideoCallingScreen = ({ navigation, route }) => {
         ]);
       }
 
-      agoraEngine.current = createAgoraRtcEngine();
-      const engine = agoraEngine.current;
+      engineRef.current = createAgoraRtcEngine();
+      const engine = engineRef.current;
 
       engine.initialize({ appId });
+      registerEngineEvents();
 
       if (callType === 'video') {
         engine.enableVideo();
       } else {
         engine.enableAudio();
       }
-
-      engine.registerEventHandler({
-        onError: (err, msg) => {
-          console.log('[Agora] Error:', err, msg);
-        },
-        onJoinChannelSuccess: (connection, elapsed) => {
-          console.log('[Agora] onJoinChannelSuccess:', connection, elapsed);
-          setIsJoined(true);
-        },
-        onUserJoined: (connection, uid, elapsed) => {
-          console.log('[Agora] onUserJoined:', uid);
-          setRemoteUid(uid);
-        },
-        onUserOffline: (connection, uid, reason) => {
-          console.log('[Agora] onUserOffline:', uid, reason);
-          setRemoteUid(0);
-          handleEndCall(false);
-        },
-      });
 
       engine.joinChannel('', channelId, 0, {
         clientRoleType: ClientRoleType.ClientRoleBroadcaster,
@@ -132,38 +135,42 @@ const VideoCallingScreen = ({ navigation, route }) => {
       db.collection('calls').doc(callDocId).update({ status: 'ended' }).catch(() => { });
     }
 
-    agoraEngine.current?.leaveChannel();
-    agoraEngine.current?.release();
+    engineRef.current?.leaveChannel();
+    engineRef.current?.release();
+    engineRef.current = null;
     setActiveCall(null);
     navigation.navigate('Main');
   };
 
   const handleMinimize = () => {
-    if (activeCall) {
-      setActiveCall({ ...activeCall, isMinimized: true });
-    }
-    navigation.goBack();
+    // Set state FIRST so components know to hide full video
+    setActiveCall(prev => ({ ...prev, isMinimized: true }));
+
+    // Small delay to ensure state propagates before transition
+    setTimeout(() => {
+      navigation.navigate('Main');
+    }, 100);
   };
 
   const toggleMute = () => {
-    agoraEngine.current?.muteLocalAudioStream(!isMuted);
+    engineRef.current?.muteLocalAudioStream(!isMuted);
     setIsMuted(!isMuted);
   };
 
   const toggleVideo = () => {
     if (callType === 'audio') return;
-    agoraEngine.current?.muteLocalVideoStream(!isVideoOff);
+    engineRef.current?.muteLocalVideoStream(!isVideoOff);
     setIsVideoOff(!isVideoOff);
   };
 
   const switchCamera = () => {
     if (callType === 'audio') return;
-    agoraEngine.current?.switchCamera();
+    engineRef.current?.switchCamera();
   };
 
   const toggleSpeaker = () => {
     const newState = !isSpeakerOn;
-    agoraEngine.current?.setEnableSpeakerphone(newState);
+    engineRef.current?.setEnableSpeakerphone(newState);
     setIsSpeakerOn(newState);
   };
 
@@ -171,7 +178,7 @@ const VideoCallingScreen = ({ navigation, route }) => {
 
   return (
     <View style={styles.container}>
-      {/* Main Video (Only render if NOT minimized to avoid Agora crash) */}
+      {/* Main Video Area */}
       {callType === 'video' && isJoined && !activeCall?.isMinimized ? (
         isSwapped ? (
           !isVideoOff ? (
@@ -186,9 +193,6 @@ const VideoCallingScreen = ({ navigation, route }) => {
             <RtcSurfaceView canvas={{ uid: remoteUid }} style={styles.remoteVideo} />
           ) : (
             <View style={styles.videoPlaceholder}>
-              <TouchableOpacity style={styles.minimizeBtn} onPress={handleMinimize}>
-                <Ionicons name="chevron-down" size={30} color="#fff" />
-              </TouchableOpacity>
               <View style={styles.avatarContainer}>
                 <Ionicons name="person" size={80} color="#fff" />
               </View>
@@ -203,9 +207,6 @@ const VideoCallingScreen = ({ navigation, route }) => {
         )
       ) : !activeCall?.isMinimized ? (
         <View style={styles.videoPlaceholder}>
-          <TouchableOpacity style={styles.minimizeBtn} onPress={handleMinimize}>
-            <Ionicons name="chevron-down" size={30} color="#fff" />
-          </TouchableOpacity>
           <View style={styles.avatarContainer}>
             <Ionicons name="person" size={80} color="#fff" />
           </View>
@@ -218,7 +219,7 @@ const VideoCallingScreen = ({ navigation, route }) => {
         </View>
       ) : <View style={{ flex: 1, backgroundColor: '#000' }} />}
 
-      {/* Picture-in-Picture Video (The smaller one) - ONLY IF NOT MINIMIZED */}
+      {/* Picture-in-Picture Video (Self Preview) */}
       {callType === 'video' && isJoined && !activeCall?.isMinimized && (
         <TouchableOpacity
           style={styles.localVideo}
@@ -241,51 +242,53 @@ const VideoCallingScreen = ({ navigation, route }) => {
         </TouchableOpacity>
       )}
 
-      {/* Minimize Button */}
-      {callType === 'video' && isJoined && !activeCall?.isMinimized && (
+      {/* Header Controls (Minimize) */}
+      {!activeCall?.isMinimized && (
         <TouchableOpacity style={styles.minimizeBtn} onPress={handleMinimize}>
           <Ionicons name="chevron-down" size={30} color="#fff" />
         </TouchableOpacity>
       )}
 
-      {/* Controls Overlay */}
-      <View style={styles.controlsContainer}>
-        {callType === 'video' && (
-          <TouchableOpacity style={styles.controlButton} onPress={switchCamera}>
-            <Ionicons name="camera-reverse" size={28} color="#fff" />
-          </TouchableOpacity>
-        )}
+      {/* Bottom Controls */}
+      {!activeCall?.isMinimized && (
+        <View style={styles.controlsContainer}>
+          {callType === 'video' && (
+            <TouchableOpacity style={styles.controlButton} onPress={switchCamera}>
+              <Ionicons name="camera-reverse" size={28} color="#fff" />
+            </TouchableOpacity>
+          )}
 
-        {callType === 'video' && (
+          {callType === 'video' && (
+            <TouchableOpacity
+              style={[styles.controlButton, isVideoOff && styles.activeControl]}
+              onPress={toggleVideo}
+            >
+              <Ionicons name={isVideoOff ? "videocam-off" : "videocam"} size={28} color={isVideoOff ? "#000" : "#fff"} />
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity
-            style={[styles.controlButton, isVideoOff && styles.activeControl]}
-            onPress={toggleVideo}
+            style={[styles.controlButton, isMuted && styles.activeControl]}
+            onPress={toggleMute}
           >
-            <Ionicons name={isVideoOff ? "videocam-off" : "videocam"} size={28} color={isVideoOff ? "#000" : "#fff"} />
+            <Ionicons name={isMuted ? "mic-off" : "mic"} size={28} color={isMuted ? "#000" : "#fff"} />
           </TouchableOpacity>
-        )}
 
-        <TouchableOpacity
-          style={[styles.controlButton, isMuted && styles.activeControl]}
-          onPress={toggleMute}
-        >
-          <Ionicons name={isMuted ? "mic-off" : "mic"} size={28} color={isMuted ? "#000" : "#fff"} />
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.controlButton, isSpeakerOn && styles.activeControl]}
+            onPress={toggleSpeaker}
+          >
+            <Ionicons name={isSpeakerOn ? "volume-high" : "volume-mute"} size={28} color={isSpeakerOn ? "#000" : "#fff"} />
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.controlButton, isSpeakerOn && styles.activeControl]}
-          onPress={toggleSpeaker}
-        >
-          <Ionicons name={isSpeakerOn ? "volume-high" : "volume-mute"} size={28} color={isSpeakerOn ? "#000" : "#fff"} />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.controlButton, styles.endCallButton]}
-          onPress={() => handleEndCall(true)}
-        >
-          <Ionicons name="call" size={30} color="#fff" />
-        </TouchableOpacity>
-      </View>
+          <TouchableOpacity
+            style={[styles.controlButton, styles.endCallButton]}
+            onPress={() => handleEndCall(true)}
+          >
+            <Ionicons name="call" size={30} color="#fff" />
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 };
