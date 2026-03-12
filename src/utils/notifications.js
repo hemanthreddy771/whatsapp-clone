@@ -76,7 +76,7 @@ export const sendPushNotification = async (fcmToken, title, body, extraData = {}
     // CRITICAL: You MUST get the actual Server Key from:
     // Firebase Console -> Project Settings -> Cloud Messaging -> Cloud Messaging API (Legacy)
     // If it's disabled, you MUST enable it in the Google Cloud Console first.
-    const SERVER_KEY = 'AAAAG5y2JvQ:APA91bF8_8_R_i_i_i_i_i_i_i_i_i'; // <-- REPLACE THIS WITH YOUR KEY FROM FIREBASE CONSOLE
+    const SERVER_KEY = 'AIzaSyANDTitIPCumJNmNnflKM1ZE8KELsKd8dI';
 
     const response = await fetch('https://fcm.googleapis.com/fcm/send', {
       method: 'POST',
