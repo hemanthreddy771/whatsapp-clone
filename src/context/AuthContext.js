@@ -8,6 +8,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [activeCall, setActiveCall] = useState(null); // { channelId, callType, callDocId, remoteUid, isVideoEnabled, etc }
 
   useEffect(() => {
     // Listen to native Firebase auth state changes
@@ -33,7 +34,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, userData, loading, setUserData }}>
+    <AuthContext.Provider value={{ user, userData, loading, setUserData, activeCall, setActiveCall }}>
       {children}
     </AuthContext.Provider>
   );

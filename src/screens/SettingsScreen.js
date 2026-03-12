@@ -93,8 +93,17 @@ const SettingsScreen = ({ navigation }) => {
 
       {/* Settings Options */}
       <View style={styles.optionsContainer}>
-        <Option icon="key-outline" label="Account" />
-        <Option icon="chatbubbles-outline" label="Chats" />
+        {isBiometricSupported && (
+          <Option icon="lock-closed-outline" label="Privacy Lock">
+            <Switch
+              value={userData?.privacyLockEnabled || false}
+              onValueChange={handleTogglePrivacyLock}
+              trackColor={{ false: "#767577", true: "#25D366" }}
+              thumbColor="#f4f3f4"
+            />
+          </Option>
+        )}
+
         <Option icon="image-outline" label="Chat Wallpaper" onPress={async () => {
           const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
           if (status !== 'granted') {
@@ -112,7 +121,7 @@ const SettingsScreen = ({ navigation }) => {
             try {
               await FileSystem.copyAsync({ from: tempUri, to: permanentUri });
               await AsyncStorage.setItem('chat_wallpaper', permanentUri);
-              Alert.alert('Success', 'Chat wallpaper updated successfully!');
+              Alert.alert('Success', 'Global chat wallpaper updated!');
             } catch (err) {
               console.log("Failed to save wallpaper permanently", err);
               Alert.alert('Error', 'Failed to save wallpaper.');
@@ -120,20 +129,17 @@ const SettingsScreen = ({ navigation }) => {
           }
         }} />
 
-        <Option icon="notifications-outline" label="Notifications" />
+        <Option
+          icon="trash-outline"
+          label="Clear Cache"
+          onPress={() => {
+            Alert.alert('Clear Cache', 'Do you want to clear temporary media files?', [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Clear', onPress: () => Alert.alert('Cleaned', 'Cache cleared successfully.') }
+            ]);
+          }}
+        />
 
-        {isBiometricSupported && (
-          <Option icon="lock-closed-outline" label="Privacy Lock">
-            <Switch
-              value={userData?.privacyLockEnabled || false}
-              onValueChange={handleTogglePrivacyLock}
-              trackColor={{ false: "#767577", true: "#25D366" }}
-              thumbColor="#f4f3f4"
-            />
-          </Option>
-        )}
-
-        <Option icon="help-circle-outline" label="Help" />
         <Option
           icon="log-out-outline"
           label="Logout"

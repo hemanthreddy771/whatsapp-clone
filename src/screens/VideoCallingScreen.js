@@ -9,19 +9,29 @@ import {
   RtcSurfaceView,
 } from 'react-native-agora';
 
+import { useAuth } from '../context/AuthContext';
+
 const appId = 'd7b226d604b649de85589eb7c5fd0ad1'; // Replace with your Agora App ID
 
 const VideoCallingScreen = ({ navigation, route }) => {
-  const { channelId, callType = 'video', callDocId } = route.params || {};
+  const { channelId, callType = 'video', callDocId, callerName } = route.params || {};
+  const { activeCall, setActiveCall } = useAuth();
   const agoraEngine = useRef();
-  const [isJoined, setIsJoined] = useState(false);
-  const [remoteUid, setRemoteUid] = useState(0);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isVideoOff, setIsVideoOff] = useState(callType === 'audio');
-  const [isSpeakerOn, setIsSpeakerOn] = useState(callType === 'video'); // Video defaults to speaker, audio to earpiece
+
+  const [isJoined, setIsJoined] = useState(activeCall?.isJoined || false);
+  const [remoteUid, setRemoteUid] = useState(activeCall?.remoteUid || 0);
+  const [isMuted, setIsMuted] = useState(activeCall?.isMuted || false);
+  const [isVideoOff, setIsVideoOff] = useState(activeCall?.isVideoOff ?? (callType === 'audio'));
+  const [isSpeakerOn, setIsSpeakerOn] = useState(activeCall?.isSpeakerOn ?? (callType === 'video'));
 
   useEffect(() => {
-    setupVideoSDKEngine();
+    // If there's an existing active call and it's this one, we don't re-init
+    if (activeCall && activeCall.callDocId === callDocId && activeCall.isJoined) {
+      console.log("[VideoCall] Reusing existing engine");
+      // Re-assign engine if needed (if it was destroyed, we'd need a new one, but here we try to keep it)
+    } else {
+      setupVideoSDKEngine();
+    }
 
     let unsubscribe = () => { };
     if (callDocId) {
@@ -30,9 +40,9 @@ const VideoCallingScreen = ({ navigation, route }) => {
           const status = doc.data().status;
           if (status === 'rejected') {
             Alert.alert('Call Declined', 'The person you called declined the call.');
-            navigation.goBack();
+            handleEndCall(false);
           } else if (status === 'ended') {
-            navigation.goBack();
+            handleEndCall(false);
           }
         }
       });
@@ -40,13 +50,28 @@ const VideoCallingScreen = ({ navigation, route }) => {
 
     return () => {
       unsubscribe();
-      if (callDocId) {
-        db.collection('calls').doc(callDocId).update({ status: 'ended' }).catch(() => { });
-      }
-      agoraEngine.current?.leaveChannel();
-      agoraEngine.current?.release();
+      // We DON'T end the call here anymore. The user must press "End" explicitly.
+      // If we are just navigating back, we mark the call as minimized.
     };
   }, []);
+
+  // Update global state whenever local state changes
+  useEffect(() => {
+    if (isJoined) {
+      setActiveCall({
+        channelId,
+        callType,
+        callDocId,
+        callerName,
+        isJoined,
+        remoteUid,
+        isMuted,
+        isVideoOff,
+        isSpeakerOn,
+        isMinimized: false
+      });
+    }
+  }, [isJoined, remoteUid, isMuted, isVideoOff, isSpeakerOn]);
 
   const setupVideoSDKEngine = async () => {
     try {
@@ -83,10 +108,8 @@ const VideoCallingScreen = ({ navigation, route }) => {
         onUserOffline: (connection, uid, reason) => {
           console.log('[Agora] onUserOffline:', uid, reason);
           setRemoteUid(0);
+          handleEndCall(false); // In communication mode, if remote leaves, call is effectively over
         },
-        onConnectionStateChanged: (connection, state, reason) => {
-          console.log('[Agora] State changed:', state, reason);
-        }
       });
 
       engine.joinChannel('', channelId, 0, {
@@ -94,13 +117,29 @@ const VideoCallingScreen = ({ navigation, route }) => {
         channelProfile: ChannelProfileType.ChannelProfileCommunication,
       });
 
-      // Set initial speaker state
       engine.setEnableSpeakerphone(isSpeakerOn);
-      console.log('[Agora] Attempting to join channel:', channelId);
     } catch (e) {
       console.error('[Agora SDK Error]', e);
-      Alert.alert('Call Error', 'Failed to initialize the calling engine. If your internet is fine, ensure your Agora App ID does not have an App Certificate enforced without a token.');
+      Alert.alert('Call Error', 'Failed to initialize the calling engine.');
     }
+  };
+
+  const handleEndCall = (shouldUpdateDb = true) => {
+    if (shouldUpdateDb && callDocId) {
+      db.collection('calls').doc(callDocId).update({ status: 'ended' }).catch(() => { });
+    }
+
+    agoraEngine.current?.leaveChannel();
+    agoraEngine.current?.release();
+    setActiveCall(null);
+    navigation.navigate('Main'); // Go back to the main screen
+  };
+
+  const handleMinimize = () => {
+    if (activeCall) {
+      setActiveCall({ ...activeCall, isMinimized: true });
+    }
+    navigation.goBack();
   };
 
   const toggleMute = () => {
@@ -109,7 +148,7 @@ const VideoCallingScreen = ({ navigation, route }) => {
   };
 
   const toggleVideo = () => {
-    if (callType === 'audio') return; // Cannot toggle video in audio-only call
+    if (callType === 'audio') return;
     agoraEngine.current?.muteLocalVideoStream(!isVideoOff);
     setIsVideoOff(!isVideoOff);
   };
@@ -135,11 +174,14 @@ const VideoCallingScreen = ({ navigation, route }) => {
         />
       ) : (
         <View style={styles.videoPlaceholder}>
+          <TouchableOpacity style={styles.minimizeBtn} onPress={handleMinimize}>
+            <Ionicons name="chevron-down" size={30} color="#fff" />
+          </TouchableOpacity>
           <View style={styles.avatarContainer}>
             <Ionicons name="person" size={80} color="#fff" />
           </View>
           <Text style={styles.callerName}>
-            {callType === 'video' ? 'Video Call' : 'Audio Call'}
+            {callerName || (callType === 'video' ? 'Video Call' : 'Audio Call')}
           </Text>
           <Text style={styles.callingStatus}>
             {remoteUid !== 0 ? 'Connected' : isJoined ? 'Ringing...' : 'Connecting...'}
@@ -153,6 +195,13 @@ const VideoCallingScreen = ({ navigation, route }) => {
           canvas={{ uid: 0 }}
           style={styles.localVideo}
         />
+      )}
+
+      {/* Minimize Button for Video */}
+      {callType === 'video' && isJoined && (
+        <TouchableOpacity style={styles.minimizeBtn} onPress={handleMinimize}>
+          <Ionicons name="chevron-down" size={30} color="#fff" />
+        </TouchableOpacity>
       )}
 
       {/* Controls Overlay */}
@@ -188,7 +237,7 @@ const VideoCallingScreen = ({ navigation, route }) => {
 
         <TouchableOpacity
           style={[styles.controlButton, styles.endCallButton]}
-          onPress={() => navigation.goBack()}
+          onPress={() => handleEndCall(true)}
         >
           <Ionicons name="call" size={30} color="#fff" />
         </TouchableOpacity>
@@ -200,7 +249,7 @@ const VideoCallingScreen = ({ navigation, route }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#075E54', // WhatsApp Green for audio, or dark for video
+    backgroundColor: '#075E54',
   },
   remoteVideo: {
     flex: 1,
@@ -223,6 +272,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#075E54',
+  },
+  minimizeBtn: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    zIndex: 10,
+    padding: 10,
   },
   avatarContainer: {
     width: 150,

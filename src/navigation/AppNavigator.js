@@ -16,6 +16,7 @@ import { registerForPushNotificationsAsync, sendPushNotification } from '../util
 import { nativeDb as db } from '../config/firebase';
 import VideoCallingScreen from '../screens/VideoCallingScreen';
 import firestore from '@react-native-firebase/firestore';
+import CallOverlay from '../components/CallOverlay';
 
 import Colors from '../constants/Colors';
 
@@ -155,6 +156,7 @@ const AppNavigator = () => {
           </>
         )}
       </Stack.Navigator>
+      <CallOverlay />
     </NavigationContainer>
   );
 };
