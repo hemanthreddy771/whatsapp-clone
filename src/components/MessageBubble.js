@@ -8,6 +8,8 @@ import { Swipeable } from 'react-native-gesture-handler';
 const { width } = Dimensions.get('window');
 
 const MessageBubble = ({ message, isMine, onMediaPress, onDownload, onSwipeToReply }) => {
+  const swipeableRef = React.useRef(null);
+
   const formatTime = (timestamp) => {
     if (!timestamp) return '';
     try {
@@ -87,12 +89,14 @@ const MessageBubble = ({ message, isMine, onMediaPress, onDownload, onSwipeToRep
 
   return (
     <Swipeable
+      ref={swipeableRef}
       friction={2}
       leftThreshold={40}
       renderLeftActions={renderLeftActions}
-      onSwipeableOpen={(direction) => {
-        if (direction === 'left' && onSwipeToReply) {
-          onSwipeToReply(message);
+      onSwipeableWillOpen={(direction) => {
+        if (direction === 'left') {
+          if (onSwipeToReply) onSwipeToReply(message);
+          swipeableRef.current?.close();
         }
       }}
     >

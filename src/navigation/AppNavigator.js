@@ -127,98 +127,10 @@ const AppNavigator = () => {
             <Stack.Screen
               name="ChatRoom"
               component={ChatRoomScreen}
-              options={({ route, navigation }) => ({
+              options={({ route }) => ({
                 title: route.params?.chatName || 'Chat',
-                headerRight: () => (
-                  <View style={{ flexDirection: 'row', marginRight: 10 }}>
-                    <TouchableOpacity
-                      style={{ marginRight: 20 }}
-                      onPress={async () => {
-                        // Notify the other user about the call
-                        const currentUser = user;
-                        if (!currentUser) return;
-
-                        const receiverId = (route.params?.chatId || '').replace(currentUser.uid, '').replace('_', '');
-                        if (!receiverId) return;
-
-                        const receiverDoc = await db.collection('users').doc(receiverId).get();
-                        const receiverData = receiverDoc.exists ? receiverDoc.data() : { displayName: 'Unknown' };
-
-                        // Log the call in history
-                        const callRef = await db.collection('calls').add({
-                          callerId: currentUser.uid,
-                          callerName: userData?.displayName || 'Unknown',
-                          receiverId: receiverId,
-                          receiverName: receiverData.displayName || 'Unknown',
-                          type: 'video',
-                          status: 'outgoing',
-                          participants: [currentUser.uid, receiverId],
-                          createdAt: firestore.FieldValue.serverTimestamp(),
-                        });
-
-                        navigation.navigate('VideoCalling', {
-                          channelId: route.params.chatId,
-                          callType: 'video',
-                          callDocId: callRef.id
-                        });
-
-                        if (receiverDoc.exists && receiverDoc.data().pushToken) {
-                          sendPushNotification(
-                            receiverDoc.data().pushToken,
-                            '📹 Incoming Video Call',
-                            `${userData?.displayName} is calling you...`,
-                            { chatId: route.params.chatId, isCall: true, callType: 'video', callerName: userData?.displayName }
-                          ).catch(() => { });
-                        }
-                      }}
-                    >
-                      <Ionicons name="videocam" size={24} color="#fff" />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={{ marginRight: 15 }}
-                      onPress={async () => {
-                        const currentUser = user;
-                        if (!currentUser) return;
-
-                        const receiverId = (route.params?.chatId || '').replace(currentUser.uid, '').replace('_', '');
-                        if (!receiverId) return;
-
-                        const receiverDoc = await db.collection('users').doc(receiverId).get();
-                        const receiverData = receiverDoc.exists ? receiverDoc.data() : { displayName: 'Unknown' };
-
-                        // Log the call in history
-                        const callRef = await db.collection('calls').add({
-                          callerId: currentUser.uid,
-                          callerName: userData?.displayName || 'Unknown',
-                          receiverId: receiverId,
-                          receiverName: receiverData.displayName || 'Unknown',
-                          type: 'audio',
-                          status: 'outgoing',
-                          participants: [currentUser.uid, receiverId],
-                          createdAt: firestore.FieldValue.serverTimestamp(),
-                        });
-
-                        navigation.navigate('VideoCalling', {
-                          channelId: route.params.chatId,
-                          callType: 'audio',
-                          callDocId: callRef.id
-                        });
-
-                        if (receiverDoc.exists && receiverDoc.data().pushToken) {
-                          sendPushNotification(
-                            receiverDoc.data().pushToken,
-                            '📞 Incoming Audio Call',
-                            `${userData?.displayName} is calling you...`,
-                            { chatId: route.params.chatId, isCall: true, callType: 'audio', callerName: userData?.displayName }
-                          ).catch(() => { });
-                        }
-                      }}
-                    >
-                      <Ionicons name="call" size={22} color="#fff" />
-                    </TouchableOpacity>
-                  </View>
-                ),
+                headerStyle: { backgroundColor: Colors.primary },
+                headerTintColor: '#fff',
               })}
             />
             <Stack.Screen
