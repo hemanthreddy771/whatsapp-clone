@@ -60,20 +60,23 @@ export const sendPushNotification = async (fcmToken, title, body, extraData = {}
       body: body,
       sound: "default",
       android_channel_id: "default",
+      priority: "high",
     },
     data: {
       ...stringifiedData,
       title: title,
       body: body,
+      click_action: "FLUTTER_NOTIFICATION_CLICK", // Helps some Android versions tap correctly
     },
     priority: 'high',
+    content_available: true, // For iOS background
   };
 
   try {
-    // For this to work directly from the client, you need your FCM Server Key.
-    // Replace 'YOUR_SERVER_KEY' with the key from your Firebase Console
-    // (Project Settings -> Cloud Messaging -> Legacy API -> Server Key)
-    const SERVER_KEY = 'AAAAG5y2JvQ:APA91bF8_8_R_i_i_i_i_i_i_i_i_i'; // MOCK - USER NEEDS TO UPDATE THIS
+    // CRITICAL: You MUST get the actual Server Key from:
+    // Firebase Console -> Project Settings -> Cloud Messaging -> Cloud Messaging API (Legacy)
+    // If it's disabled, you MUST enable it in the Google Cloud Console first.
+    const SERVER_KEY = 'AAAAG5y2JvQ:APA91bF8_8_R_i_i_i_i_i_i_i_i_i'; // <-- REPLACE THIS WITH YOUR KEY FROM FIREBASE CONSOLE
 
     const response = await fetch('https://fcm.googleapis.com/fcm/send', {
       method: 'POST',

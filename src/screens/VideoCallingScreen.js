@@ -23,6 +23,7 @@ const VideoCallingScreen = ({ navigation, route }) => {
   const [isMuted, setIsMuted] = useState(activeCall?.isMuted || false);
   const [isVideoOff, setIsVideoOff] = useState(activeCall?.isVideoOff ?? (callType === 'audio'));
   const [isSpeakerOn, setIsSpeakerOn] = useState(activeCall?.isSpeakerOn ?? (callType === 'video'));
+  const [isSwapped, setIsSwapped] = useState(false);
 
   useEffect(() => {
     // If there's an existing active call and it's this one, we don't re-init
@@ -164,14 +165,40 @@ const VideoCallingScreen = ({ navigation, route }) => {
     setIsSpeakerOn(newState);
   };
 
+  const swapVideos = () => setIsSwapped(!isSwapped);
+
   return (
     <View style={styles.container}>
-      {/* Background/Remote Video */}
-      {callType === 'video' && isJoined && remoteUid !== 0 ? (
-        <RtcSurfaceView
-          canvas={{ uid: remoteUid }}
-          style={styles.remoteVideo}
-        />
+      {/* Main Video (Remote or Local based on Swap) */}
+      {callType === 'video' && isJoined ? (
+        isSwapped ? (
+          !isVideoOff ? (
+            <RtcSurfaceView canvas={{ uid: 0 }} style={styles.remoteVideo} />
+          ) : (
+            <View style={styles.videoPlaceholder}>
+              <Ionicons name="videocam-off" size={60} color="#fff" />
+            </View>
+          )
+        ) : (
+          remoteUid !== 0 ? (
+            <RtcSurfaceView canvas={{ uid: remoteUid }} style={styles.remoteVideo} />
+          ) : (
+            <View style={styles.videoPlaceholder}>
+              <TouchableOpacity style={styles.minimizeBtn} onPress={handleMinimize}>
+                <Ionicons name="chevron-down" size={30} color="#fff" />
+              </TouchableOpacity>
+              <View style={styles.avatarContainer}>
+                <Ionicons name="person" size={80} color="#fff" />
+              </View>
+              <Text style={styles.callerName}>
+                {callerName || 'Video Call'}
+              </Text>
+              <Text style={styles.callingStatus}>
+                Ringing...
+              </Text>
+            </View>
+          )
+        )
       ) : (
         <View style={styles.videoPlaceholder}>
           <TouchableOpacity style={styles.minimizeBtn} onPress={handleMinimize}>
@@ -189,12 +216,27 @@ const VideoCallingScreen = ({ navigation, route }) => {
         </View>
       )}
 
-      {/* Local Video Preview */}
-      {callType === 'video' && isJoined && !isVideoOff && (
-        <RtcSurfaceView
-          canvas={{ uid: 0 }}
+      {/* Picture-in-Picture Video (The smaller one) */}
+      {callType === 'video' && isJoined && (
+        <TouchableOpacity
           style={styles.localVideo}
-        />
+          activeOpacity={0.8}
+          onPress={swapVideos}
+        >
+          {isSwapped ? (
+            remoteUid !== 0 ? (
+              <RtcSurfaceView canvas={{ uid: remoteUid }} style={styles.miniVideoInner} />
+            ) : (
+              <View style={styles.miniPlaceholderInner}><Ionicons name="person" size={30} color="#fff" /></View>
+            )
+          ) : (
+            !isVideoOff ? (
+              <RtcSurfaceView canvas={{ uid: 0 }} style={styles.miniVideoInner} />
+            ) : (
+              <View style={styles.miniPlaceholderInner}><Ionicons name="videocam-off" size={20} color="#fff" /></View>
+            )
+          )}
+        </TouchableOpacity>
       )}
 
       {/* Minimize Button for Video */}
@@ -326,6 +368,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF3B30',
     transform: [{ rotate: '135deg' }],
   },
+  miniVideoInner: {
+    flex: 1,
+  },
+  miniPlaceholderInner: {
+    flex: 1,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+  }
 });
 
 export default VideoCallingScreen;
