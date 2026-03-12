@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, PanResponder, Animated, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
@@ -7,28 +7,31 @@ import { RtcSurfaceView } from 'react-native-agora';
 
 const { width, height } = Dimensions.get('window');
 
-const OVERLAY_WIDTH = 160;
-const OVERLAY_HEIGHT = 220;
+// 3:4 Ratio Layout (150x200)
+const OVERLAY_WIDTH = 150;
+const OVERLAY_HEIGHT = 200;
 
 const CallOverlay = () => {
-    const { activeCall, setActiveCall } = useAuth();
+    const { activeCall, setActiveCall, engineRef } = useAuth();
     const navigation = useNavigation();
-    const lastTap = React.useRef(0);
+    const lastTap = useRef(0);
 
-    // Initial position using a ref to track current value without re-renders
-    const pan = React.useRef(new Animated.ValueXY({
+    // Initial position logic
+    const pan = useRef(new Animated.ValueXY({
         x: width - OVERLAY_WIDTH - 20,
         y: height - OVERLAY_HEIGHT - 120
     })).current;
 
-    if (!activeCall || !activeCall.isMinimized) return null;
+    // Safety check: Don't render if no call or not minimized
+    if (!activeCall || !activeCall.isMinimized) {
+        return null;
+    }
 
-    const panResponder = React.useRef(
+    const panResponder = useRef(
         PanResponder.create({
             onStartShouldSetPanResponder: () => true,
             onMoveShouldSetPanResponder: () => true,
             onPanResponderGrant: () => {
-                // Safely set offset
                 pan.setOffset({
                     x: pan.x._value || 0,
                     y: pan.y._value || 0
@@ -42,21 +45,21 @@ const CallOverlay = () => {
                 let targetX = pan.x._value;
                 let targetY = pan.y._value;
 
-                // Edge snapping logic
+                // Snapping logic
                 if (targetX < width / 2 - OVERLAY_WIDTH / 2) {
                     targetX = 15;
                 } else {
                     targetX = width - OVERLAY_WIDTH - 15;
                 }
 
-                // Vertical boundary checks
+                // Boundary logic
                 if (targetY < 60) targetY = 60;
                 if (targetY > height - OVERLAY_HEIGHT - 130) targetY = height - OVERLAY_HEIGHT - 130;
 
                 Animated.spring(pan, {
                     toValue: { x: targetX, y: targetY },
                     useNativeDriver: false,
-                    damping: 25, // Smoother damping
+                    damping: 25,
                     stiffness: 120
                 }).start();
             },
@@ -67,8 +70,8 @@ const CallOverlay = () => {
         const now = Date.now();
         const DOUBLE_PRESS_DELAY = 300;
         if (now - lastTap.current < DOUBLE_PRESS_DELAY) {
-            // Double tap to expand
-            setActiveCall({ ...activeCall, isMinimized: false });
+            // Expand call
+            setActiveCall(prev => prev ? { ...prev, isMinimized: false } : null);
             navigation.navigate('VideoCalling', {
                 channelId: activeCall.channelId,
                 callType: activeCall.callType,
@@ -77,6 +80,47 @@ const CallOverlay = () => {
             });
         }
         lastTap.current = now;
+    };
+
+    // Render logic for different call types
+    const renderContent = () => {
+        if (activeCall.callType === 'audio') {
+            return (
+                <View style={styles.audioContent}>
+                    <Ionicons name="call" size={24} color="#fff" />
+                    <View style={styles.audioInfo}>
+                        <Text style={styles.miniText} numberOfLines={1}>{activeCall.callerName || 'In Call'}</Text>
+                        <Text style={styles.miniSubText}>Ongoing...</Text>
+                    </View>
+                </View>
+            );
+        }
+
+        // Essential Hardware Check: Only render Agora views if the engine actually exists globally
+        if (!engineRef.current) return <View style={styles.blackBox}><Text style={{ color: '#fff' }}>Relinking...</Text></View>;
+
+        return (
+            <View style={styles.videoContainer}>
+                {/* Remote Video (Receiver) - Fills the 3:4 frame */}
+                <View style={styles.fullBackground}>
+                    {activeCall.remoteUid !== 0 ? (
+                        <RtcSurfaceView canvas={{ uid: activeCall.remoteUid }} style={styles.videoFill} />
+                    ) : (
+                        <View style={styles.placeholderBox}>
+                            <Ionicons name="person" size={50} color="rgba(255,255,255,0.4)" />
+                            <Text style={styles.placeholderText}>Connecting...</Text>
+                        </View>
+                    )}
+                </View>
+
+                {/* Local Video (Dialer) - Small Corner Overlay */}
+                {!activeCall.isVideoOff && (
+                    <View style={styles.localPreview}>
+                        <RtcSurfaceView canvas={{ uid: 0 }} style={styles.videoFill} />
+                    </View>
+                )}
+            </View>
+        );
     };
 
     return (
@@ -88,35 +132,10 @@ const CallOverlay = () => {
                 activeCall.callType === 'audio' && styles.audioOverlay
             ]}
         >
-            <TouchableOpacity onPress={handlePress} activeOpacity={0.9} style={styles.content}>
-                {activeCall.callType === 'video' ? (
-                    <View style={styles.videoSplit}>
-                        <View style={styles.remoteHalf}>
-                            {activeCall.remoteUid !== 0 ? (
-                                <RtcSurfaceView canvas={{ uid: activeCall.remoteUid }} style={styles.miniVideo} />
-                            ) : (
-                                <View style={styles.miniPlaceholder}>
-                                    <Ionicons name="person" size={50} color="#fff" />
-                                </View>
-                            )}
-                        </View>
-                        {!activeCall.isVideoOff && (
-                            <View style={styles.localCorner}>
-                                <RtcSurfaceView canvas={{ uid: 0 }} style={styles.miniVideo} />
-                            </View>
-                        )}
-                    </View>
-                ) : (
-                    <View style={styles.miniPlaceholder}>
-                        <Ionicons name="call" size={26} color="#fff" />
-                        <View style={{ marginLeft: 12 }}>
-                            <Text style={styles.miniText} numberOfLines={1}>{activeCall.callerName || 'In Call'}</Text>
-                            <Text style={{ color: '#ccc', fontSize: 10 }}>Minimized</Text>
-                        </View>
-                    </View>
-                )}
-                <View style={styles.expandInfo}>
-                    <Text style={{ color: '#fff', fontSize: 9, fontWeight: 'bold' }}>2X TAP TO OPEN</Text>
+            <TouchableOpacity onPress={handlePress} activeOpacity={0.95} style={styles.touchArea}>
+                {renderContent()}
+                <View style={styles.instruction}>
+                    <Text style={styles.instructionText}>2x TAP TO OPEN</Text>
                 </View>
             </TouchableOpacity>
         </Animated.View>
@@ -129,7 +148,7 @@ const styles = StyleSheet.create({
         width: OVERLAY_WIDTH,
         height: OVERLAY_HEIGHT,
         backgroundColor: '#1c1c1c',
-        borderRadius: 15,
+        borderRadius: 12,
         elevation: 10,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
@@ -137,58 +156,86 @@ const styles = StyleSheet.create({
         shadowRadius: 6,
         overflow: 'hidden',
         zIndex: 9999,
-        borderWidth: 2,
-        borderColor: 'rgba(255,255,255,0.2)',
+        borderWidth: 1.5,
+        borderColor: 'rgba(255,255,255,0.15)',
     },
     audioOverlay: {
         height: 70,
-        width: 200,
+        width: 190,
         backgroundColor: '#075E54',
     },
-    content: {
+    touchArea: {
         flex: 1,
     },
-    videoSplit: {
+    videoContainer: {
         flex: 1,
     },
-    remoteHalf: {
+    fullBackground: {
         flex: 1,
-        backgroundColor: '#2c3e50',
+        backgroundColor: '#000',
     },
-    localCorner: {
+    videoFill: {
+        flex: 1,
+    },
+    placeholderBox: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    placeholderText: {
+        color: 'rgba(255,255,255,0.4)',
+        fontSize: 10,
+        marginTop: 5,
+    },
+    localPreview: {
         position: 'absolute',
         bottom: 12,
         right: 12,
-        width: 50,
-        height: 75,
+        width: 45,
+        height: 60, // Keep 3:4 ratio for local too
         borderRadius: 6,
         overflow: 'hidden',
-        borderWidth: 2,
+        borderWidth: 1.5,
         borderColor: '#fff',
         backgroundColor: '#000',
     },
-    miniVideo: {
-        flex: 1,
-    },
-    miniPlaceholder: {
+    audioContent: {
         flex: 1,
         flexDirection: 'row',
-        justifyContent: 'center',
         alignItems: 'center',
-        padding: 5,
+        paddingHorizontal: 15,
+    },
+    audioInfo: {
+        marginLeft: 12,
     },
     miniText: {
         color: '#fff',
-        fontSize: 16,
-        fontWeight: 'bold',
+        fontSize: 15,
+        fontWeight: '700',
     },
-    expandInfo: {
+    miniSubText: {
+        color: 'rgba(255,255,255,0.6)',
+        fontSize: 10,
+    },
+    instruction: {
         position: 'absolute',
         bottom: 0,
         left: 0,
         right: 0,
         backgroundColor: 'rgba(0,0,0,0.6)',
         paddingVertical: 3,
+        alignItems: 'center',
+    },
+    instructionText: {
+        color: '#fff',
+        fontSize: 8,
+        fontWeight: 'bold',
+        letterSpacing: 0.5,
+    },
+    blackBox: {
+        flex: 1,
+        backgroundColor: '#000',
+        justifyContent: 'center',
         alignItems: 'center',
     }
 });

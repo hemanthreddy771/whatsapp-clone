@@ -143,13 +143,27 @@ const VideoCallingScreen = ({ navigation, route }) => {
   };
 
   const handleMinimize = () => {
-    // Set state FIRST so components know to hide full video
-    setActiveCall(prev => ({ ...prev, isMinimized: true }));
+    // Safety check: Don't do anything if we don't have enough data
+    if (!channelId) return;
 
-    // Small delay to ensure state propagates before transition
-    setTimeout(() => {
-      navigation.navigate('Main');
-    }, 100);
+    // Set state safely using a functional update
+    setActiveCall(prev => ({
+      ...prev,
+      channelId,
+      callType,
+      callDocId,
+      callerName,
+      isJoined,
+      remoteUid,
+      isMuted,
+      isVideoOff,
+      isSpeakerOn,
+      isMinimized: true
+    }));
+
+    // Use replace or navigate to ensure the current screen is unmounted properly
+    navigation.popToTop();
+    navigation.navigate('Main');
   };
 
   const toggleMute = () => {
