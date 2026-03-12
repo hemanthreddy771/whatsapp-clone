@@ -112,6 +112,11 @@ const MessageBubble = ({ message, isMine, onMediaPress, onDownload, onSwipeToRep
             <Text style={styles.time}>{formatTime(message.createdAt)}</Text>
             {renderStatus()}
           </View>
+          {message.reaction && (
+            <View style={[styles.reactionBadge, isMine ? { left: -10 } : { right: -10 }]}>
+              <Text style={styles.reactionEmoji}>{message.reaction}</Text>
+            </View>
+          )}
         </View>
       </View>
     </Swipeable>
@@ -168,7 +173,13 @@ const styles = StyleSheet.create({
   replyText: { fontSize: 14, color: '#666', marginTop: 2 },
   replyAction: {
     justifyContent: 'center', alignItems: 'center', width: 50, height: '100%',
-  }
+  },
+  reactionBadge: {
+    position: 'absolute', bottom: -12, backgroundColor: '#fff', borderRadius: 12, padding: 2,
+    elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.2, shadowRadius: 1,
+    minWidth: 24, height: 24, justifyContent: 'center', alignItems: 'center',
+  },
+  reactionEmoji: { fontSize: 14 },
 });
 
 export default MessageBubble;

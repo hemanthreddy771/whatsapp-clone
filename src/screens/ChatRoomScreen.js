@@ -42,6 +42,7 @@ const ChatRoomScreen = ({ route, navigation }) => {
   const [replyingTo, setReplyingTo] = useState(null);
 
   const [isOtherTyping, setIsOtherTyping] = useState(false);
+  const [reactionMessage, setReactionMessage] = useState(null);
   const typingTimeoutRef = useRef(null);
   const flatListRef = useRef(null);
 
@@ -53,7 +54,6 @@ const ChatRoomScreen = ({ route, navigation }) => {
     loadWallpaper();
   }, []);
 
-  // Set header with profile photo
   useEffect(() => {
     navigation.setOptions({
       headerTitle: () => (
@@ -68,8 +68,43 @@ const ChatRoomScreen = ({ route, navigation }) => {
           <Text style={{ color: '#fff', fontSize: 18, fontWeight: '600' }}>{chatName}</Text>
         </View>
       ),
+      headerRight: () => (
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <TouchableOpacity style={{ marginRight: 15 }} onPress={pickMedia}>
+            <Ionicons name="attach" size={24} color="#fff" style={{ transform: [{ rotate: '45deg' }] }} />
+          </TouchableOpacity>
+          <TouchableOpacity style={{ marginRight: 10 }} onPress={pickWallpaper}>
+            <Ionicons name="image-outline" size={24} color="#fff" />
+          </TouchableOpacity>
+        </View>
+      )
     });
   }, [chatName, chatPhoto]);
+
+  const pickWallpaper = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow gallery access to change wallpaper.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8,
+    });
+    if (!result.canceled) {
+      const tempUri = result.assets[0].uri;
+      const filename = tempUri.split('/').pop();
+      const permanentUri = FileSystem.documentDirectory + 'wallpaper_' + filename;
+      try {
+        await FileSystem.copyAsync({ from: tempUri, to: permanentUri });
+        await AsyncStorage.setItem('chat_wallpaper', permanentUri);
+        setWallpaper(permanentUri);
+        Alert.alert('Success', 'Chat wallpaper updated!');
+      } catch (err) {
+        console.log("Failed to save wallpaper", err);
+      }
+    }
+  };
 
   useEffect(() => {
     if (!chatId || !user?.uid) return;
@@ -89,12 +124,21 @@ const ChatRoomScreen = ({ route, navigation }) => {
           // Mark unread messages from OTHER user as "delivered"
           snapshot.docs.forEach(doc => {
             const msg = doc.data();
-            if (msg.senderId !== user.uid && msg.status === 'sent') {
-              doc.ref.update({ status: 'delivered' });
-            }
-            // Mark as "read" since user is viewing
-            if (msg.senderId !== user.uid && (msg.status === 'sent' || msg.status === 'delivered')) {
-              doc.ref.update({ status: 'read' });
+            if (msg.senderId !== user.uid) {
+              if (msg.status === 'sent') {
+                doc.ref.update({ status: 'delivered' });
+                // Also update chat metadata if this was the last message
+                if (doc.id === fetchedMessages[0]?.id) {
+                  db.collection('chats').doc(chatId).update({ lastMessageStatus: 'delivered' }).catch(() => { });
+                }
+              }
+              // Mark as "read" since user is viewing
+              if (msg.status === 'sent' || msg.status === 'delivered') {
+                doc.ref.update({ status: 'read' });
+                if (doc.id === fetchedMessages[0]?.id) {
+                  db.collection('chats').doc(chatId).update({ lastMessageStatus: 'read' }).catch(() => { });
+                }
+              }
             }
           });
         }
@@ -144,6 +188,22 @@ const ChatRoomScreen = ({ route, navigation }) => {
   };
 
   const handleLongPressMessage = (message) => {
+    setReactionMessage(message);
+  };
+
+  const addReaction = async (message, emoji) => {
+    try {
+      await db.collection('chats').doc(chatId).collection('messages').doc(message.id).update({
+        reaction: emoji
+      });
+      setReactionMessage(null);
+    } catch (err) {
+      console.log("Reaction error:", err);
+    }
+  };
+
+  const deleteMessage = (message) => {
+    setReactionMessage(null);
     Alert.alert(
       'Delete Message',
       'Are you sure you want to delete this message?',
@@ -247,6 +307,7 @@ const ChatRoomScreen = ({ route, navigation }) => {
         lastMessage: mediaUrl ? (mediaType === 'video' ? '🎥 Video' : '📷 Photo') : textToSend,
         lastMessageTime: firestore.FieldValue.serverTimestamp(),
         lastMessageSenderId: user.uid,
+        lastMessageStatus: 'sent',
         participants: participants,
         [`name_${user.uid}`]: userData?.displayName || 'Unknown',
         [`photo_${user.uid}`]: userData?.photoURL || null,
@@ -389,6 +450,31 @@ const ChatRoomScreen = ({ route, navigation }) => {
           </TouchableOpacity>
         </View>
       </Modal>
+
+      {/* Message Options / Emoji Reactions Modal */}
+      <Modal visible={!!reactionMessage} transparent={true} animationType="fade" onRequestClose={() => setReactionMessage(null)}>
+        <TouchableOpacity style={styles.reactionOverlay} activeOpacity={1} onPress={() => setReactionMessage(null)}>
+          <View style={styles.reactionContainer}>
+            <View style={styles.emojiRow}>
+              {['❤️', '👍', '😂', '😮', '😢', '🙏'].map((emoji) => (
+                <TouchableOpacity key={emoji} style={styles.emojiBtn} onPress={() => addReaction(reactionMessage, emoji)}>
+                  <Text style={styles.emojiText}>{emoji}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={styles.menuOptions}>
+              <TouchableOpacity style={styles.menuBtn} onPress={() => { setReplyingTo(reactionMessage); setReactionMessage(null); }}>
+                <Ionicons name="arrow-undo-outline" size={20} color="#000" />
+                <Text style={styles.menuBtnText}>Reply</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.menuBtn, { borderTopWidth: 0.5, borderTopColor: '#eee' }]} onPress={() => deleteMessage(reactionMessage)}>
+                <Ionicons name="trash-outline" size={20} color="#FF3B30" />
+                <Text style={[styles.menuBtnText, { color: '#FF3B30' }]}>Delete Message</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </KeyboardAvoidingView>
   );
 };
@@ -446,6 +532,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', position: 'absolute', bottom: 50,
     backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 25,
   },
+  reactionOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center',
+  },
+  reactionContainer: {
+    backgroundColor: '#fff', borderRadius: 20, width: '80%', overflow: 'hidden', padding: 10, elevation: 5,
+  },
+  emojiRow: {
+    flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: '#eee',
+  },
+  emojiBtn: {
+    padding: 8,
+  },
+  emojiText: { fontSize: 28 },
+  menuOptions: { paddingVertical: 5 },
+  menuBtn: {
+    flexDirection: 'row', alignItems: 'center', padding: 15,
+  },
+  menuBtnText: { marginLeft: 15, fontSize: 16, color: '#000' },
 });
 
 export default ChatRoomScreen;

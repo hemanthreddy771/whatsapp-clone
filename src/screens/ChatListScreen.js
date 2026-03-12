@@ -141,6 +141,13 @@ const ChatListScreen = ({ navigation }) => {
     const displayName = item[`name_${otherParticipantId}`] || item.chatName || 'Unknown';
     const profilePhoto = item[`photo_${otherParticipantId}`];
     const unreadCount = item[`unreadCount_${user.uid}`] || 0;
+    const renderStatus = () => {
+      if (item.lastMessageSenderId !== user?.uid || !item.lastMessage) return null;
+      const status = item.lastMessageStatus || 'sent';
+      const color = status === 'read' ? '#53bdeb' : '#8696a0';
+      const iconText = (status === 'delivered' || status === 'read') ? '✓✓' : '✓';
+      return <Text style={{ fontSize: 13, marginRight: 3, color, fontWeight: 'bold' }}>{iconText}</Text>;
+    };
 
     return (
       <TouchableOpacity
@@ -170,9 +177,12 @@ const ChatListScreen = ({ navigation }) => {
             </Text>
           </View>
           <View style={styles.chatBody}>
-            <Text style={[styles.lastMessage, unreadCount > 0 && { color: '#000', fontWeight: '500' }]} numberOfLines={1}>
-              {item.lastMessage || 'No messages yet...'}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+              {renderStatus()}
+              <Text style={[styles.lastMessage, unreadCount > 0 && { color: '#000', fontWeight: '500' }]} numberOfLines={1}>
+                {item.lastMessage || 'No messages yet...'}
+              </Text>
+            </View>
             {unreadCount > 0 && (
               <View style={styles.unreadBadge}>
                 <Text style={styles.unreadCountText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>

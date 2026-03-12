@@ -40,31 +40,53 @@ export const registerForPushNotificationsAsync = async () => {
 // Function to send FCM Data message directly via an edge function or mock endpoint
 // Note: Direct client-to-client FCM HTTP v1 calls require a secure backend because sending requires the Service Account key.
 // We are mimicking a server call payload here that a real backend would process.
-export const sendPushNotification = async (fcmToken, title, body, data = {}) => {
+// Function to send FCM Data message directly
+export const sendPushNotification = async (fcmToken, title, body, extraData = {}) => {
   if (!fcmToken) {
     console.log("Aborted sending notification: No push token provided.");
     return;
   }
 
-  // To send real FCM from a client app without a custom backend, you typically use a Firebase Cloud function.
-  // Assuming a cloud function endpoint exists:
+  // Convert all boolean values to strings for FCM Data compatibility
+  const stringifiedData = {};
+  Object.keys(extraData).forEach(key => {
+    stringifiedData[key] = String(extraData[key]);
+  });
+
   const payload = {
     to: fcmToken,
     notification: {
       title: title,
       body: body,
       sound: "default",
+      android_channel_id: "default",
     },
     data: {
-      ...data,
-      priority: 'high',
-    }
+      ...stringifiedData,
+      title: title,
+      body: body,
+    },
+    priority: 'high',
   };
 
   try {
-    // Note: Due to security, you cannot use the FCM v1 HTTP API directly from the react-native client
-    // without exposing your service account key. The app realistically needs a cloud function here.
-    console.log("Mocking server request to Firebase FCM with payload:", payload);
+    // For this to work directly from the client, you need your FCM Server Key.
+    // Replace 'YOUR_SERVER_KEY' with the key from your Firebase Console
+    // (Project Settings -> Cloud Messaging -> Legacy API -> Server Key)
+    const SERVER_KEY = 'AAAAG5y2JvQ:APA91bF8_8_R_i_i_i_i_i_i_i_i_i'; // MOCK - USER NEEDS TO UPDATE THIS
+
+    const response = await fetch('https://fcm.googleapis.com/fcm/send', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `key=${SERVER_KEY}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const result = await response.json();
+    console.log("FCM response:", result);
+    return result;
   } catch (error) {
     console.error("Error calling FCM:", error);
   }
