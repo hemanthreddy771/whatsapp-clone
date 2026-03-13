@@ -6,6 +6,7 @@ import {
   ChannelProfileType,
   ClientRoleType,
   RtcSurfaceView,
+  RtcTextureView,
 } from 'react-native-agora';
 import { nativeDb as db } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
@@ -160,24 +161,29 @@ const VideoCallingScreen = ({ navigation, route }) => {
     // 1. Immediately hide local videos in this screen to prevent hardware conflicts
     setIsMinimizing(true);
 
-    // 2. Update global state for PiP. We use current local state values to be safe.
-    setActiveCall({
-      channelId,
-      callType,
-      callDocId,
-      callerName,
-      isJoined,
-      remoteUid,
-      isMuted,
-      isVideoOff,
-      isSpeakerOn,
-      isMinimized: true
-    });
-
-    // 3. Defer navigation slightly for smoother state propagation
+    // 2. Clear current call views by waiting for a render cycle
     setTimeout(() => {
+      // 3. Navigate to Main first while overlay is still inactive
       navigation.navigate('Main');
-    }, 100);
+
+      // 4. Trigger the global PiP overlay AFTER a safety delay
+      // This ensures VideoCallingScreen views are gone and navigation is ongoing
+      setTimeout(() => {
+        setActiveCall(prev => ({
+          ...prev,
+          channelId,
+          callType,
+          callDocId,
+          callerName,
+          isJoined,
+          remoteUid,
+          isMuted,
+          isVideoOff,
+          isSpeakerOn,
+          isMinimized: true
+        }));
+      }, 300);
+    }, 50);
   };
 
   const toggleMute = () => {
@@ -262,7 +268,7 @@ const VideoCallingScreen = ({ navigation, route }) => {
             )
           ) : (
             !isVideoOff ? (
-              <RtcSurfaceView canvas={{ uid: 0 }} style={styles.miniVideoInner} />
+              <RtcSurfaceView canvas={{ uid: 0 }} style={styles.miniVideoInner} zOrderMediaOverlay={true} />
             ) : (
               <View style={styles.miniPlaceholderInner}><Ionicons name="videocam-off" size={20} color="#fff" /></View>
             )

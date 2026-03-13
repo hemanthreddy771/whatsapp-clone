@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, PanResponder, Animated, Dimen
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
-import { RtcSurfaceView } from 'react-native-agora';
+import { RtcSurfaceView, RtcTextureView } from 'react-native-agora';
 
 const { width, height } = Dimensions.get('window');
 
@@ -124,7 +124,10 @@ const CallOverlay = () => {
                 {/* Remote Video (Receiver) - Fills the 3:4 frame */}
                 <View style={styles.fullBackground}>
                     {activeCall.remoteUid !== 0 ? (
-                        <RtcSurfaceView canvas={{ uid: activeCall.remoteUid }} style={styles.videoFill} />
+                        <RtcTextureView
+                            canvas={{ uid: activeCall.remoteUid }}
+                            style={styles.videoFill}
+                        />
                     ) : (
                         <View style={styles.placeholderBox}>
                             <Ionicons name="person" size={50} color="rgba(255,255,255,0.4)" />
@@ -136,7 +139,11 @@ const CallOverlay = () => {
                 {/* Local Video (Dialer) - Small Corner Overlay */}
                 {!activeCall.isVideoOff && (
                     <View style={styles.localPreview}>
-                        <RtcSurfaceView canvas={{ uid: 0 }} style={styles.videoFill} />
+                        <RtcTextureView
+                            canvas={{ uid: 0 }}
+                            style={styles.videoFill}
+                            zOrderMediaOverlay={true}
+                        />
                     </View>
                 )}
             </View>
