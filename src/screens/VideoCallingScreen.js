@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, PermissionsAndroid, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, PermissionsAndroid, Platform, Alert, BackHandler } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import {
   createAgoraRtcEngine,
@@ -64,15 +64,26 @@ const VideoCallingScreen = ({ navigation, route }) => {
       });
     }
 
+    const backAction = () => {
+      if (isJoined) {
+        handleMinimize();
+        return true;
+      }
+      return false;
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+
     return () => {
       unsubscribe();
+      backHandler.remove();
     };
-  }, []);
+  }, [isJoined, channelId, callType, callDocId, callerName, remoteUid, isMuted, isVideoOff, isSpeakerOn]);
 
   useEffect(() => {
-    // Only update context if we are NOT in the middle of minimizing
-    // and only if we are actually joined (to avoid overwriting min-state)
-    if (isJoined && !isMinimizing && !activeCall?.isMinimized) {
+    // Sync state to global context as soon as we join/get updates
+    // But ONLY if we are the active screen (not minimized)
+    if (isJoined && !activeCall?.isMinimized && !isMinimizing) {
       setActiveCall({
         channelId,
         callType,
@@ -161,18 +172,13 @@ const VideoCallingScreen = ({ navigation, route }) => {
     // 1. Immediately hide local videos in this screen
     setIsMinimizing(true);
 
-    // 2. Pause to ensure views unmount before updating state and navigating
-    setTimeout(() => {
-      setActiveCall(prev => ({
-        ...prev,
-        isMinimized: true
-      }));
+    // 2. Set global state safety check
+    setActiveCall(prev => prev ? { ...prev, isMinimized: true } : null);
 
-      // 3. Final safety buffer before screen transition
-      setTimeout(() => {
-        navigation.navigate('Main');
-      }, 300);
-    }, 150);
+    // 3. Navigation with tiny timeout to let local UI refresh
+    setTimeout(() => {
+      navigation.navigate('Main');
+    }, 50);
   };
 
   const toggleMute = () => {

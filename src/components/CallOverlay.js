@@ -25,9 +25,8 @@ const CallOverlay = () => {
 
     useEffect(() => {
         if (activeCall?.isMinimized) {
-            // Safety: Wait for main screen to unmount views before showing ours
-            // Increased to 1200ms for absolute stability on all devices
-            const timer = setTimeout(() => setIsTransitioning(false), 1200);
+            // Safety: Wait just a moment for the screen transition to settle
+            const timer = setTimeout(() => setIsTransitioning(false), 300);
             return () => clearTimeout(timer);
         } else {
             setIsTransitioning(true);
@@ -112,10 +111,7 @@ const CallOverlay = () => {
         if (!engineRef.current || isTransitioning) {
             return (
                 <View style={styles.blackBox}>
-                    <ActivityIndicator size="small" color="#fff" />
-                    <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 10, marginTop: 10 }}>
-                        {isTransitioning ? 'Handing over...' : 'Starting...'}
-                    </Text>
+                    <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10 }}>Starting...</Text>
                 </View>
             );
         }
@@ -149,10 +145,10 @@ const CallOverlay = () => {
                 activeCall.callType === 'audio' && styles.audioOverlay
             ]}
         >
-            <TouchableOpacity onPress={handlePress} activeOpacity={0.95} style={styles.touchArea}>
+            <TouchableOpacity onPress={handlePress} activeOpacity={0.9} style={styles.touchArea}>
                 {renderContent()}
                 <View style={styles.instruction}>
-                    <Text style={styles.instructionText}>2x TAP TO OPEN</Text>
+                    <Text style={styles.instructionText}>DOUBLE TAP TO EXPAND</Text>
                 </View>
             </TouchableOpacity>
         </Animated.View>
