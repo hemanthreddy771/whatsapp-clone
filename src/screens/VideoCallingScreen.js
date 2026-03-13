@@ -30,9 +30,23 @@ const VideoCallingScreen = ({ navigation, route }) => {
       setupVideoSDKEngine();
     } else {
       console.log("[VideoCall] Reusing global engine");
-      // If we are reusing, we might need to re-register events if they were cleared
       registerEngineEvents();
     }
+
+    // Sync initial state to global context immediately on mount
+    // This prevents "null spread" crashes if minimizing before joining
+    setActiveCall({
+      channelId,
+      callType,
+      callDocId,
+      callerName,
+      isJoined: isJoined,
+      remoteUid: remoteUid,
+      isMuted: isMuted,
+      isVideoOff: isVideoOff,
+      isSpeakerOn: isSpeakerOn,
+      isMinimized: false
+    });
 
     let unsubscribe = () => { };
     if (callDocId) {
@@ -51,14 +65,13 @@ const VideoCallingScreen = ({ navigation, route }) => {
 
     return () => {
       unsubscribe();
-      // IMPORTANT: No engine release or leaveChannel here.
-      // That only happens in handleEndCall.
     };
   }, []);
 
   useEffect(() => {
-    if (isJoined) {
-      const currentlyMinimized = activeCall?.isMinimized || false;
+    // Only update context if we are NOT in the middle of minimizing
+    // and only if we are actually joined (to avoid overwriting min-state)
+    if (isJoined && !isMinimizing && !activeCall?.isMinimized) {
       setActiveCall({
         channelId,
         callType,
@@ -69,10 +82,10 @@ const VideoCallingScreen = ({ navigation, route }) => {
         isMuted,
         isVideoOff,
         isSpeakerOn,
-        isMinimized: currentlyMinimized
+        isMinimized: false
       });
     }
-  }, [isJoined, remoteUid, isMuted, isVideoOff, isSpeakerOn, activeCall?.isMinimized]);
+  }, [isJoined, remoteUid, isMuted, isVideoOff, isSpeakerOn, isMinimizing]);
 
   const registerEngineEvents = () => {
     const engine = engineRef.current;
@@ -144,12 +157,11 @@ const VideoCallingScreen = ({ navigation, route }) => {
   };
 
   const handleMinimize = () => {
-    // 1. Immediately hide local videos
+    // 1. Immediately hide local videos in this screen to prevent hardware conflicts
     setIsMinimizing(true);
 
-    // 2. Update global state for PiP
-    setActiveCall(prev => ({
-      ...prev,
+    // 2. Update global state for PiP. We use current local state values to be safe.
+    setActiveCall({
       channelId,
       callType,
       callDocId,
@@ -160,12 +172,12 @@ const VideoCallingScreen = ({ navigation, route }) => {
       isVideoOff,
       isSpeakerOn,
       isMinimized: true
-    }));
+    });
 
     // 3. Defer navigation slightly for smoother state propagation
     setTimeout(() => {
       navigation.navigate('Main');
-    }, 50);
+    }, 100);
   };
 
   const toggleMute = () => {

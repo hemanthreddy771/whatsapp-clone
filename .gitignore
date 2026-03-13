@@ -40,4 +40,6 @@ app-example
 
 # generated native folders
 /ios
-/android
+# firebase
+firebase-admin-sdk.json
+google-services.json

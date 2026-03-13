@@ -1,5 +1,5 @@
-import React, { useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, PanResponder, Animated, Dimensions } from 'react-native';
+import React, { useRef, useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, PanResponder, Animated, Dimensions, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
@@ -15,12 +15,23 @@ const CallOverlay = () => {
     const { activeCall, setActiveCall, engineRef } = useAuth();
     const navigation = useNavigation();
     const lastTap = useRef(0);
+    const [isTransitioning, setIsTransitioning] = useState(true);
 
     // Initial position logic
     const pan = useRef(new Animated.ValueXY({
         x: width - OVERLAY_WIDTH - 20,
         y: height - OVERLAY_HEIGHT - 120
     })).current;
+
+    useEffect(() => {
+        if (activeCall?.isMinimized) {
+            // Safety: Wait for main screen to unmount views before showing ours
+            const timer = setTimeout(() => setIsTransitioning(false), 500);
+            return () => clearTimeout(timer);
+        } else {
+            setIsTransitioning(true);
+        }
+    }, [activeCall?.isMinimized]);
 
     // Safety check: Don't render if no call or not minimized
     if (!activeCall || !activeCall.isMinimized) {
@@ -97,7 +108,16 @@ const CallOverlay = () => {
         }
 
         // Essential Hardware Check: Only render Agora views if the engine actually exists globally
-        if (!engineRef.current) return <View style={styles.blackBox}><Text style={{ color: '#fff' }}>Relinking...</Text></View>;
+        if (!engineRef.current || isTransitioning) {
+            return (
+                <View style={styles.blackBox}>
+                    <ActivityIndicator size="small" color="#fff" />
+                    <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 10, marginTop: 10 }}>
+                        {isTransitioning ? 'Transitioning...' : 'Relinking...'}
+                    </Text>
+                </View>
+            );
+        }
 
         return (
             <View style={styles.videoContainer}>
