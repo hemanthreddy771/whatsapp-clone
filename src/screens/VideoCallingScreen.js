@@ -158,32 +158,19 @@ const VideoCallingScreen = ({ navigation, route }) => {
   };
 
   const handleMinimize = () => {
-    // 1. Immediately hide local videos in this screen to prevent hardware conflicts
+    // 1. Immediately hide local videos in this screen
     setIsMinimizing(true);
 
-    // 2. Clear current call views by waiting for a render cycle
-    setTimeout(() => {
-      // 3. Navigate to Main first while overlay is still inactive
-      navigation.navigate('Main');
+    // 2. Set the global state so CallOverlay knows transition is starting
+    setActiveCall(prev => ({
+      ...prev,
+      isMinimized: true
+    }));
 
-      // 4. Trigger the global PiP overlay AFTER a safety delay
-      // This ensures VideoCallingScreen views are gone and navigation is ongoing
-      setTimeout(() => {
-        setActiveCall(prev => ({
-          ...prev,
-          channelId,
-          callType,
-          callDocId,
-          callerName,
-          isJoined,
-          remoteUid,
-          isMuted,
-          isVideoOff,
-          isSpeakerOn,
-          isMinimized: true
-        }));
-      }, 300);
-    }, 50);
+    // 3. Navigate away after a short delay to allow the isMinimizing render pass
+    setTimeout(() => {
+      navigation.navigate('Main');
+    }, 100);
   };
 
   const toggleMute = () => {

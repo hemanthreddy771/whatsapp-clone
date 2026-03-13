@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, PanResponder, Animated, Dimen
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
-import { RtcSurfaceView, RtcTextureView } from 'react-native-agora';
+import { RtcSurfaceView } from 'react-native-agora';
 
 const { width, height } = Dimensions.get('window');
 
@@ -26,7 +26,8 @@ const CallOverlay = () => {
     useEffect(() => {
         if (activeCall?.isMinimized) {
             // Safety: Wait for main screen to unmount views before showing ours
-            const timer = setTimeout(() => setIsTransitioning(false), 500);
+            // Increased to 800ms for extra stability on slower devices
+            const timer = setTimeout(() => setIsTransitioning(false), 800);
             return () => clearTimeout(timer);
         } else {
             setIsTransitioning(true);
@@ -124,7 +125,7 @@ const CallOverlay = () => {
                 {/* Remote Video (Receiver) - Fills the 3:4 frame */}
                 <View style={styles.fullBackground}>
                     {activeCall.remoteUid !== 0 ? (
-                        <RtcTextureView
+                        <RtcSurfaceView
                             canvas={{ uid: activeCall.remoteUid }}
                             style={styles.videoFill}
                         />
@@ -136,10 +137,10 @@ const CallOverlay = () => {
                     )}
                 </View>
 
-                {/* Local Video (Dialer) - Small Corner Overlay */}
+                {/* Local Video - Small Corner Overlay, explicitly set to stay on top */}
                 {!activeCall.isVideoOff && (
                     <View style={styles.localPreview}>
-                        <RtcTextureView
+                        <RtcSurfaceView
                             canvas={{ uid: 0 }}
                             style={styles.videoFill}
                             zOrderMediaOverlay={true}
