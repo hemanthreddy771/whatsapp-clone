@@ -64,8 +64,15 @@ const VideoCallingScreen = ({ navigation, route }) => {
       });
     }
 
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+  // Dedicated stable BackHandler listener for PiP handover
+  useEffect(() => {
     const backAction = () => {
-      if (isJoined) {
+      if (channelId && !isMinimizing) {
         handleMinimize();
         return true;
       }
@@ -73,12 +80,8 @@ const VideoCallingScreen = ({ navigation, route }) => {
     };
 
     const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
-
-    return () => {
-      unsubscribe();
-      backHandler.remove();
-    };
-  }, [isJoined, channelId, callType, callDocId, callerName, remoteUid, isMuted, isVideoOff, isSpeakerOn]);
+    return () => backHandler.remove();
+  }, [channelId, isMinimizing]);
 
   useEffect(() => {
     // Sync state to global context as soon as we join/get updates
@@ -169,16 +172,23 @@ const VideoCallingScreen = ({ navigation, route }) => {
   };
 
   const handleMinimize = () => {
-    // 1. Immediately hide local videos in this screen
+    // 1. WhatsApp Style: Hide views locally first
     setIsMinimizing(true);
 
-    // 2. Set global state safety check
-    setActiveCall(prev => prev ? { ...prev, isMinimized: true } : null);
+    // 2. NAVIGATE FIRST. This unmounts the current screen's video views.
+    navigation.navigate('Main');
 
-    // 3. Navigation with tiny timeout to let local UI refresh
+    // 3. WAIT until the main screen starts unmounting before activating the overlay
+    // This is the CRITICAL fix for the crash: Overlay must not exist while main view is active.
     setTimeout(() => {
-      navigation.navigate('Main');
-    }, 50);
+      setActiveCall(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          isMinimized: true
+        };
+      });
+    }, 400); // 400ms is enough for the screen transition to begin
   };
 
   const toggleMute = () => {

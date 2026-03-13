@@ -121,10 +121,13 @@ const CallOverlay = () => {
                 {/* Remote Video ONLY (Per user requirement for stability) */}
                 <View style={styles.fullBackground}>
                     {activeCall.remoteUid !== 0 ? (
-                        <RtcSurfaceView
-                            canvas={{ uid: activeCall.remoteUid }}
-                            style={styles.videoFill}
-                        />
+                        <View style={styles.videoWrapper}>
+                            <RtcSurfaceView
+                                canvas={{ uid: activeCall.remoteUid }}
+                                style={styles.videoFill}
+                                zOrderMediaOverlay={true}
+                            />
+                        </View>
                     ) : (
                         <View style={styles.placeholderBox}>
                             <Ionicons name="person" size={50} color="rgba(255,255,255,0.4)" />
@@ -189,6 +192,11 @@ const styles = StyleSheet.create({
     },
     videoFill: {
         flex: 1,
+    },
+    videoWrapper: {
+        flex: 1,
+        borderRadius: 12,
+        overflow: 'hidden',
     },
     placeholderBox: {
         flex: 1,
