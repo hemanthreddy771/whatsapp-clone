@@ -161,16 +161,18 @@ const VideoCallingScreen = ({ navigation, route }) => {
     // 1. Immediately hide local videos in this screen
     setIsMinimizing(true);
 
-    // 2. Set the global state so CallOverlay knows transition is starting
-    setActiveCall(prev => ({
-      ...prev,
-      isMinimized: true
-    }));
-
-    // 3. Navigate away after a short delay to allow the isMinimizing render pass
+    // 2. Pause to ensure views unmount before updating state and navigating
     setTimeout(() => {
-      navigation.navigate('Main');
-    }, 100);
+      setActiveCall(prev => ({
+        ...prev,
+        isMinimized: true
+      }));
+
+      // 3. Final safety buffer before screen transition
+      setTimeout(() => {
+        navigation.navigate('Main');
+      }, 300);
+    }, 150);
   };
 
   const toggleMute = () => {

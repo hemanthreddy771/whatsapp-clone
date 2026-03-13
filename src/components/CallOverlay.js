@@ -26,8 +26,8 @@ const CallOverlay = () => {
     useEffect(() => {
         if (activeCall?.isMinimized) {
             // Safety: Wait for main screen to unmount views before showing ours
-            // Increased to 800ms for extra stability on slower devices
-            const timer = setTimeout(() => setIsTransitioning(false), 800);
+            // Increased to 1200ms for absolute stability on all devices
+            const timer = setTimeout(() => setIsTransitioning(false), 1200);
             return () => clearTimeout(timer);
         } else {
             setIsTransitioning(true);
@@ -114,7 +114,7 @@ const CallOverlay = () => {
                 <View style={styles.blackBox}>
                     <ActivityIndicator size="small" color="#fff" />
                     <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 10, marginTop: 10 }}>
-                        {isTransitioning ? 'Transitioning...' : 'Relinking...'}
+                        {isTransitioning ? 'Handing over...' : 'Starting...'}
                     </Text>
                 </View>
             );
@@ -122,7 +122,7 @@ const CallOverlay = () => {
 
         return (
             <View style={styles.videoContainer}>
-                {/* Remote Video (Receiver) - Fills the 3:4 frame */}
+                {/* Remote Video ONLY (Per user requirement for stability) */}
                 <View style={styles.fullBackground}>
                     {activeCall.remoteUid !== 0 ? (
                         <RtcSurfaceView
@@ -136,17 +136,6 @@ const CallOverlay = () => {
                         </View>
                     )}
                 </View>
-
-                {/* Local Video - Small Corner Overlay, explicitly set to stay on top */}
-                {!activeCall.isVideoOff && (
-                    <View style={styles.localPreview}>
-                        <RtcSurfaceView
-                            canvas={{ uid: 0 }}
-                            style={styles.videoFill}
-                            zOrderMediaOverlay={true}
-                        />
-                    </View>
-                )}
             </View>
         );
     };
